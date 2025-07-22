@@ -1,0 +1,88 @@
+.MuiAvatar-circular {
+    display: none !important;
+}
+
+/*
+#new-chat-button {
+    display: none !important;
+}
+*/
+/*.css-1a6az2d*/
+
+.css-1qe6x04 {
+    display: none !important;
+}
+
+/* Elimina el primer HR de la lista*/
+ul.MuiList-root hr.css-1a6az2d:first-of-type {
+    display: none;
+}
+
+.watermark {
+    display: none !important;
+}
+
+.MuiAlert-standardInfo {
+    display: none !important;
+}
+
+.css-93z3fs {
+    color: #f8b900 !important;
+    text-decoration: underline #f8b900 !important;
+}
+
+#actions-list {
+    color: #f8b900 !important;
+}
+
+.css-hhc1wx img {
+    max-height: 30px !important;
+}
+/*
+img[src=""] {
+    display: none;
+}
+*/
+/* Modificación para la imagen de login - con nuevo nombre para forzar recarga */
+img.absolute.inset-0.h-full.w-full.object-cover {
+    content: url("/public/login_new.png") !important;
+    filter: none !important;
+}
+
+/* Para modo oscuro - eliminamos el filtro */
+.dark img.absolute.inset-0.h-full.w-full.object-cover {
+    filter: none !important;
+}
+
+.modebar-btn--logo {
+    display: none !important;
+}
+
+.modebar-btn.plotlyjsicon.modebar-btn--logo {
+    display: none !important;
+}
+
+[data-val="lasso"],
+[data-val="zoom"],
+[data-val="select"],
+[data-val="in"],
+[data-val="out"],
+[data-val="auto"],
+[data-val="pan"] {
+    display: none !important;
+}
+/*
+.plot-container {
+    filter: invert(85%) hue-rotate(180deg);
+}
+.graph-card [id^="graph-new-"] .main-svg {
+    border-radius: 2px !important;
+}
+.js-plotly-plot {
+    background: transparent !important;
+}
+
+.modebar-btn--logo {
+    display: none !important;
+}
+*/

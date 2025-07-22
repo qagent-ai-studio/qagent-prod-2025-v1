@@ -1,0 +1,95 @@
+<!-- AIzaSyDak1Rwnebczes1NSlHNv1iHN7fxUKLl7U -->
+<!DOCTYPE html>
+<html>
+
+<head>
+      <title>Ruta a Foco de Incendio</title>
+      <style>
+            #map {
+                  height: 100vh;
+                  width: 100%;
+            }
+      </style>
+</head>
+
+<body>
+      <div id="map"></div>
+      <script>
+            function getQueryParam(name) {
+                  const url = new URL(window.location.href);
+                  return url.searchParams.get(name);
+            }
+
+            function initMap() {
+                  const origen = getQueryParam('origen');
+                  const destino = getQueryParam('destino');
+                  if (!origen || !destino) {
+                        alert("Faltan parámetros origen o destino en la URL");
+                        return;
+                  }
+
+                  const [origLat, origLng] = origen.split(',').map(Number);
+                  const [destLat, destLng] = destino.split(',').map(Number);
+
+                  const map = new google.maps.Map(document.getElementById("map"), {
+                        zoom: 18,
+                        center: { lat: (origLat + destLat) / 2, lng: (origLng + destLng) / 2 },
+                        mapTypeId: "roadmap" // Asegura modo con etiquetas
+                  });
+
+                  // Capa de tráfico
+                  const trafficLayer = new google.maps.TrafficLayer();
+                  trafficLayer.setMap(map);
+
+                  // Calcula la ruta
+                  const directionsService = new google.maps.DirectionsService();
+                  const directionsRenderer = new google.maps.DirectionsRenderer({
+                        map: map,
+                        suppressMarkers: true // Para usar nuestros propios íconos
+                  });
+
+                  directionsService.route({
+                        origin: { lat: origLat, lng: origLng },
+                        destination: { lat: destLat, lng: destLng },
+                        travelMode: google.maps.TravelMode.DRIVING
+                  }, function (response, status) {
+                        if (status === google.maps.DirectionsStatus.OK) {
+                              directionsRenderer.setDirections(response);
+                        } else {
+                              alert('No se pudo calcular la ruta: ' + status);
+                        }
+                  });
+
+                  // Íconos personalizados
+                  const iconFlag = {
+                        url: "https://cdn-icons-png.flaticon.com/512/684/684908.png", // Bandera
+                        scaledSize: new google.maps.Size(40, 40)
+                  };
+                  const iconFire = {
+                        url: "http://127.0.0.1:8000/public/fire.png", // Fuego
+                        scaledSize: new google.maps.Size(40, 40)
+                  };
+
+                  // Marcador de inicio (bandera)
+                  new google.maps.Marker({
+                        position: { lat: origLat, lng: origLng },
+                        map,
+                        icon: iconFlag,
+                        title: "Inicio (Brigada)"
+                  });
+
+                  // Marcador de destino (fuego)
+                  new google.maps.Marker({
+                        position: { lat: destLat, lng: destLng },
+                        map,
+                        icon: iconFire,
+                        title: "Destino (Incendio)"
+                  });
+            }
+      </script>
+      <!-- Pega tu propia API Key abajo -->
+      <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDak1Rwnebczes1NSlHNv1iHN7fxUKLl7U&callback=initMap"
+            async defer></script>
+</body>
+
+</html>

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mis Gráficos</title>
+    <link rel="icon" type="image/png" href="public/favicon.png">
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-locale-es-latest.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link href="/public/styles/theme_dark.css" rel="stylesheet">
+
+    <!-- Dragula -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/dragula/3.7.3/dragula.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dragula/3.7.3/dragula.min.js"></script>
+
+    <link href="/public/clases.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #212121 !important;
+            color: #ffffff !important;
+        }
+
+        .card {
+            background: var(--background);
+            border: 1px solid var(--border);
+            border-radius: 0.5rem;
+        }
+
+
+        .button {
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            font-weight: 500;
+        }
+
+        .button-ghost {
+            background: transparent;
+            color: var(--foreground);
+        }
+
+        .button-ghost:hover {
+            background: var(--accent);
+        }
+
+        .button-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .text-muted-foreground {
+            color: var(--muted-foreground);
+        }
+
+        .animate-spin {
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            from {
+                transform: rotate(0deg);
+            }
+
+            to {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-background text-foreground">
+    <div id="root"></div>
+
+    <script src="/public/elements/GraphsPage.js"></script>
+    <script>
+        Plotly.setPlotConfig({ locale: 'es' });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,99 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.bat
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Chainlit
+chainlit.md
+
+# Entornos virtuales
+venv/
+env/
+ENV/
+.env
+.venv
+env.bak/
+venv.bak/
+
+# IDEs y editores
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Logs y bases de datos
+*.log
+*.sqlite
+*.db
+
+# Archivos de caché
+.cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Archivos temporales
+*.tmp
+*.bak
+*.swp
+*~
+
+# Archivos de configuración local
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Archivos de dependencias
+node_modules/
+package-lock.json
+yarn.lock
+
+# Archivos de build
+dist/
+build/
+*.pyc
+
+# Carpeta de datos generados
+.files/
+
+
+QAgent/tools/credentials/*
+QAgent/tools/guides/*
+
+!QAgent/tools/credentials/.gitkeep
+!QAgent/tools/guides/.gitkeep
+
+storage/*
+!storage/.gitkeep
+
+public/storage/*
+public/temp/*
+!public/storage/.gitkeep
+
+*.pkl
+*.index
+*.sql
+*.back
+._materiales/
+*.pptx
+*.code-workspace
