@@ -85,31 +85,31 @@ def get_random_response(response_type: str = "error") -> str:
         
     elif response_type == "consultando":
         responses = [
-            "Perfecto, estoy pensando la consulta que debo ejecutar...",
-            "Ok, dame un momento para comprender la consulta.",
-            "No hay problema, ya estoy trabajando en tu solicitud, un momento por favor.",
+            "Estoy pensando la consulta que debo ejecutar...",
+            "Dame un momento para comprender la consulta.",
+            "Estoy trabajando en tu solicitud, un momento por favor.",
             "De inmediato voy a consultar en la base de datos, puede tomar un momento",
-            "Ok, ya estoy procesando tu solicitud, esto puede tardar unos segundos.",
-            "Enseguida, voy a generar la consulta en mis datos, gracias por tu paciencia.",
+            "Estoy procesando tu solicitud, esto puede tardar unos segundos.",
+            "Voy a generar la consulta en mis datos, gracias por tu paciencia.",
             "Un momento, estoy formulando la mejor consulta posible.",
             "Voy a construir la consulta para obtener los datos correctos.",
-            "Ok, primero voy a diseñar la instrucción SQL adecuada, aguarda un momento.",
-            "Traduciendo tu solicitud a lenguaje de base de datos...",
-            "Por supuesto, dame unos segundos para definir correctamente los filtros y condiciones."
+            "Voy a diseñar la instrucción SQL adecuada, aguarda un momento.",
+            "Traduciendo la solicitud a lenguaje de base de datos...",
+            "Dame unos segundos para definir correctamente los filtros y condiciones."
            
         ]            
         
     elif response_type == "analisis":
         responses = [
             "Analizando la información disponible, ya te respondo.",
-            "Estoy revisando los datos para darte una respuesta precisa.",
             "Revisando los datos para darte una respuesta precisa.",
+            "Revisando la respuesta.",
             "Estoy preparando la respuesta, aguarda un instante.",
             "Interpretando los resultados obtenidos...",
             "Procesando los datos para ofrecerte una conclusión clara.",
             "Estoy validando que los datos coincidan con lo que solicitaste.",
             "Realizando el análisis final antes de entregarte la respuesta.",
-            "Ya tengo la información, ahora la estoy interpretando para ti."
+            "Tengo la información, ahora la estoy interpretando para ti."
         ]            
     else:  # tiempo
         responses = [

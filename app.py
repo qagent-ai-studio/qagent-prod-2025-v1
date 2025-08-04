@@ -223,7 +223,6 @@ async def chat_profile():
 async def on_chat_resume(thread):
     logger.info("El usuario reanudó una sesión de chat anterior")     
     
-   
 
 # Callback para botones de acción
 @cl.action_callback("action_button")
@@ -260,15 +259,10 @@ async def set_starters():
             icon="/public/learn.svg",
         ),
         cl.Starter(
-            label="20 preguntas + frecuentes ",
-            message="Lista las 20 preguntas más frecuentes que puedes responder.",
+            label="Preguntas más frecuentes",
+            message="Lista las preguntas más frecuentes que puedes responder.",
             icon="/public/idea.svg",
-        ),
-        cl.Starter(
-            label="Estado de un Pedido",
-            message="__Estado de un Pedido__",
-            icon="/public/pedido.svg",
-        ),
+        )
     ]
 
 # Función para crear manejadores de eventos
@@ -592,11 +586,19 @@ async def main(message: cl.Message):
     # Definir aqui,  casos especiales para instrucciones adicionales
     # Ejemplo
     
+    '''
     if "informe del cliente" in message.content.lower():
         logger.info(f"---> Aplica instrucciones adicionales---\n")
         additional_instructions = instrucciones_adicionales       
     else:
         additional_instructions = ""
+    '''    
+        
+    if  message.content == "Lista las preguntas más frecuentes que puedes responder.":
+        additional_instructions = instrucciones_adicionales       
+    else:
+        additional_instructions = ""
+            
     
     if message.content.startswith("TELEGRAM_MSN:"):
         # Aplicar lógica específica

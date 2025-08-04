@@ -32,6 +32,8 @@ class ConfigManager:
         
         self._config['PROVEEDOR'] = os.environ.get("PROVEEDOR")
         
+        # Consulta SQL a conexiones
+        
         # Configuración de OpenAI
         self._config['OPENAI_API_KEY'] = os.environ.get("OPENAI_API_KEY")
         self._config['OPENAI_ASSISTANT_ID'] = os.environ.get("OPENAI_ASSISTANT_ID")
@@ -61,7 +63,7 @@ class ConfigManager:
         self._config['DB_ASQLS_DRIVER'] = os.environ.get("DB_ASQLS_DRIVER")        
         
         # Configuración de bases de datos GSQLS
-        self._config['DB_GCP_SQLS_SERVER'] = os.environ.get("DB_GCP_SQLS_SERVER")
+        self._config['DB_GCP_SQLS_SERVER'] = os.environ.get("DB_GCP_SQLS_SERVER") 
         self._config['DB_CP_SQLS_DATABASE'] = os.environ.get("DB_CP_SQLS_DATABASE")
         self._config['DB_DB_GCP_SQLS_USERNAME'] = os.environ.get("DB_DB_GCP_SQLS_USERNAME")
         self._config['DB_GCP_SQLS_PASSWORD'] = os.environ.get("DB_GCP_SQLS_PASSWORD")
