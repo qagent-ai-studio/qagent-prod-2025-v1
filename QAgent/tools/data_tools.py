@@ -116,6 +116,7 @@ class GetDataAzureSQLServerAD(BaseTool):
             DRIVER   = config.get("DB_ASQLS_DRIVER")
 
             logger.info("🔐 Obteniendo token desde Azure CLI...")
+            os.environ["PATH"] += os.pathsep + "/usr/bin"
             credential = AzureCliCredential()
             token = credential.get_token("https://database.windows.net/.default").token.encode("utf-16-le")
             token_struct = struct.pack(f"<I{len(token)}s", len(token), token)
@@ -144,7 +145,7 @@ class GetDataAzureSQLServerAD(BaseTool):
                 connect_args={
                     "attrs_before": {SQL_COPT_SS_ACCESS_TOKEN: token_struct},
                     "application_name": "Qagent_App",
-                    "autocommit": True,
+                    "autocommit": False,
                 },
             )
         return cls._engine
@@ -155,9 +156,21 @@ class GetDataAzureSQLServerAD(BaseTool):
             logger.info(f"Ejecutando consulta: {consulta}")
 
             with engine.connect() as conn:
-                df_resultado = pd.read_sql(consulta, conn)
+                try:
+                    logger.info("✅ Conexión abierta, ejecutando consulta con pd.read_sql desde raw pyodbc connection...")
+                    
+                    # Usar conexión pyodbc directamente
+                    raw_conn = conn.connection.connection  # 👈 no el de SQLAlchemy
+                    
+                    df_resultado = pd.read_sql(consulta, raw_conn)
+                    logger.info("✅ Consulta ejecutada correctamente.")
+                except Exception as e:
+                    logger.error(f"❌ Error durante pd.read_sql: {e}")
+                    raise
+
             resultados = df_resultado.to_dict(orient="records")
             filas = len(resultados)
+
 
             if filas > 100:
                 url_archo_excel = await generar_excel_desde_mysql(resultados)
@@ -178,10 +191,12 @@ class GetDataAzureSQLServerAD(BaseTool):
                     )
                 })
             elif filas >= 15:
+                url_archo_excel = await generar_excel_desde_mysql(resultados)
                 resultados.insert(0, {
                     "Instrucción adicional": (
-                        f"El resultado tiene {filas} filas. Debes utilizar la herramienta createDataFrame() para paginar los resultados, "
-                        f"no formato markdown. **Debe estar en formato dict serializado en JSON. Nunca lo envíes como un string anidado ni como tabla Markdown y limpia los campos null.**"
+                        f"# Atención, esto es muy importante para el usuario: "
+                        f"- El resultado tiene {filas} filas. "
+                        f"**Despliega solo las primeras 20 filas e informa al usuario que puede descargar el archivo excel con todos los datos en el siguiente link [Descargar Excel]({url_archo_excel}) renderiza el link en formato md.**"
                     )
                 })
             else:
@@ -203,6 +218,7 @@ class GetDataAzureSQLServerAD(BaseTool):
 
         except SQLAlchemyError as err:
             error_message = str(err)
+            logger.error(f"Error {error_message}")
             response = get_random_response("error")
             await cl.Message(response).send()
 
