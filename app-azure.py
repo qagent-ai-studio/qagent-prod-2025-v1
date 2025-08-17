@@ -14,7 +14,7 @@ import uuid
 import bcrypt
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Callable
+from typing import List, Optional, Callable, Dict
 
 # Chainlit
 import chainlit as cl
@@ -107,11 +107,11 @@ except OpenAIError as e:
 event_factory = EventHandlerFactory()
 event_factory.register_strategy("openai", OpenAIEventStrategy)
 
-
+"""
 # Autenticación
 @cl.password_auth_callback
 async def auth_callback(username: str, password: str):
-    """Autenticación contra PostgreSQL con opción de superadmin desde variables de entorno"""
+    #Autenticación contra PostgreSQL con opción de superadmin desde variables de entorno
     try:
         # Verificar credenciales de superadmin definidas en variables de entorno
         super_admin_user = app_config.get("SUPER_ADMIN_USER")
@@ -167,6 +167,34 @@ async def auth_callback(username: str, password: str):
                 metadata={"role": "admin", "provider": "credentials"}
             )
         return None
+"""
+
+import os, re
+from chainlit.oauth_providers import providers as cl_providers
+
+print("ENV OAUTH_AZURE_AD_CLIENT_ID =", os.getenv("OAUTH_AZURE_AD_CLIENT_ID"))
+print("Providers cargados:", [(p.id, getattr(p, "client_id", None)) for p in cl_providers])
+
+
+
+@cl.oauth_callback
+def oauth_callback(provider_id: str,token: str,raw_user_data: Dict[str, str],default_user: cl.User,):
+    
+    logger.info("---------------------------")
+    logger.info(f"provider_id{provider_id}")
+    logger.info(f"token{token}")
+    logger.info(f"raw_user_data{raw_user_data}")
+    logger.info(f"default_user{default_user}")
+    logger.info("---------------------------")
+    
+    return default_user
+
+
+
+
+@cl.on_chat_start
+async def start():
+    await cl.Message(f"¡Bienvenido {cl.user().identifier}!").send()
 
 @cl.action_callback("fijar_grafico")
 async def on_fijar_grafico(action: cl.Action):

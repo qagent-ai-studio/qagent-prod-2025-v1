@@ -426,53 +426,77 @@ const renderGraphsNew = async () => {
       </style>
   `;
 
-    try {
-        console.log("🔄 Cargando reporte...");
+ try {
+  console.log("🔄 Cargando reporte...");
 
-        const response = await fetch("/api/get_last_and_previous_report", {
-            method: "POST",
-            credentials: "include",
-            headers: { "Content-Type": "application/json", Accept: "application/json" },
-            body: JSON.stringify({}),
-        });
+  const response = await fetch("/api/get_last_and_previous_report", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({}),
+  });
 
-        if (!response.ok) {
-            const respData = await response.json();
-
-            if (response.status === 401) {
-                window.location.href = "/login";
-                return;
-            }
-
-            showErrorNew("Error: " + (respData.error || "Error desconocido"));
-            return;
-        }
-
-        const respData = await response.json();
-
-        // Aquí el truco: asigna el último reporte como data
-        const data = respData.ultimo || respData.data || {}; // fallback si hay un cambio de backend
-        const anterior = respData.anterior || null;
-
-        const container = document.getElementById("graphs-container-new");
-        console.log("✅ Reporte Cargado.");
-        console.log("📊 Datos ultimo mes:", data);
-
-        //renderGraphsInOrder(data);
-        renderGraphsInOrder(data, anterior);
-
-        // Si quieres hacer la comparativa con el anterior:
-        if (anterior) {
-            console.log("📊 Datos anteriores", anterior);
-            //renderComparativa(data, anterior); // implementa esta función si quieres
-        } else {
-            // Mensaje opcional para el usuario
-            document.getElementById("comparativa-label").textContent = "Primer mes: sin comparativo.";
-        }
-    } catch (error) {
-        console.error("💥 Error:", error);
-        showErrorNew("Error: " + error.message);
+  if (!response.ok) {
+    // leer el body con cuidado (puede no ser JSON)
+    let respData = {};
+    try { respData = await response.json(); } catch (_) {}
+    if (response.status === 401) {
+      window.location.href = "/login";
+      return;
     }
+    showErrorNew("Error: " + (respData.error || "Error desconocido"));
+    return;
+  }
+
+  const respData = await response.json();
+
+  // Normaliza y tolera ausencia de datos
+  const data = respData?.ultimo ?? respData?.data ?? null;
+  const anterior = respData?.anterior ?? null;
+
+  const container = document.getElementById("graphs-container-new");
+
+  console.log("✅ Reporte Cargado.");
+  console.log("📊 Datos último mes:", data);
+
+  // Si no hay ningún reporte aún, muestra mensaje y corta
+  if (!data) {
+    if (container) container.innerHTML = "<div>No hay reportes aún.</div>";
+    const label = document.getElementById("comparativa-label");
+    if (label) label.textContent = "Sin datos: no hay comparativo disponible.";
+    return;
+  }
+
+  // Render seguro (acepta firma con/anterior o sin)
+  try {
+    if (typeof renderGraphsInOrder === "function") {
+      // tu firma original con comparativo opcional
+      renderGraphsInOrder(data, anterior);
+    } else {
+      console.warn("renderGraphsInOrder no está definida.");
+    }
+  } catch (e) {
+    console.error("Error en renderGraphsInOrder:", e);
+    showErrorNew("No se pudieron renderizar los gráficos.");
+  }
+
+  // Mensaje de comparativa
+  if (anterior) {
+    console.log("📊 Datos anteriores:", anterior);
+    // renderComparativa?.(data, anterior);
+  } else {
+    const label = document.getElementById("comparativa-label");
+    if (label) {
+      label.textContent = "Primer mes: sin comparativo.";
+    } else {
+      console.warn('No se encontró #comparativa-label (se omite mensaje)');
+    }
+  }
+} catch (error) {
+  console.error("💥 Error:", error);
+  showErrorNew("Error: " + error.message);
+}
+
 };
 
 // Función para renderizar gráficos en el orden correcto
@@ -732,84 +756,6 @@ const renderGraphsInOrder = (data, anterior = null) => {
             <div style="padding: 20px;">
                   <div id="analisis_ia" style="padding: 10px;">
                   
-                  <h2>Análisis de Interacciones y Conversaciones con el Asistente AI - Chat Comercial/Operativo</h2>
-
-                  <h3>1. Tenor y Preguntas Más Frecuentes</h3>
-                  <ul>
-                  <li><b>Consultas sobre ventas y productos:</b> Las preguntas más repetidas giran en torno a ventas por periodo, productos más vendidos, ranking de vendedores, mix de productos por unidad de medida, y evolución de ventas de categorías como fitosanitarios, semillas y fertilizantes.</li>   
-                  <li><b>Consultas técnicas y regulatorias:</b> Hay reiteradas solicitudes de fichas técnicas SAG, ingredientes activos, productos para plagas específicas (ej. mosquita blanca, benomilo), y cumplimiento normativo.</li>
-                  <li><b>Análisis de clientes y vendedores:</b> Se repiten preguntas sobre segmentación de clientes por volumen de compra, productos preferidos por cliente, top vendedores por sucursal y participación de mercado.</li>
-                  <li><b>Solicitudes de visualización:</b> Es frecuente la petición de gráficos de torta, barras, líneas, burbujas y gauges para visualizar KPIs 
-                  comerciales, evolución de ventas y comparaciones contra presupuesto.</li>
-                  </ul>
-                  <p><b>Ejemplos de preguntas frecuentes:</b> “¿Cuáles son los 3 mejores vendedores?”, “¿Qué productos existen para la mosquita blanca?”, “Hazme un gráfico de evolución de ventas mensuales de fitosanitarios”, “¿Cuántos litros de BIOAMINO-L se vendieron en San Felipe en 2024?”, “¿Quién es el 
-                  mejor vendedor de San Felipe para productos Bayer?”.</p>
-
-                  <h3>2. Tipos de Análisis Solicitados y Objetivos de Información</h3>
-                  <ul>
-                  <li><b>Análisis comerciales:</b> Evolución de ventas por producto, categoría, sucursal o vendedor; ranking de productos/clientes/vendedores; comparativos año contra año; análisis de mix por unidad de medida; participación de vendedores en ventas totales.</li>
-                  <li><b>Análisis técnicos y normativos:</b> Consulta de fichas técnicas, ingredientes activos, productos autorizados por SAG, uso de plaguicidas/fertilizantes, cumplimiento de normativas.</li>
-                  <li><b>Soporte a la gestión y toma de decisiones:</b> Visualización de KPIs, avance contra presupuesto, identificación de productos de nicho vs. masivos, segmentación de clientes y oportunidades de venta cruzada.</li>
-                  <li><b>Visualización y exploración de datos:</b> Solicitud de ejemplos de gráficos avanzados (burbujas, scatter, gauge, mapas), pruebas de colores y formatos para dashboards y reportes ejecutivos.</li>
-                  <li><b>Soporte operativo:</b> Estado de pedidos, consultas de facturas, búsqueda de clientes y productos específicos por SKU o razón social.</li>
-                  </ul>
-
-                  <h3>3. Análisis General de Sentimiento</h3>
-                  <ul>
-                  <li><b>Sentimiento global:</b> Predominantemente positivo y constructivo. El usuario explora capacidades, desafía el sistema y agradece respuestas útiles (“Muy buen dato!”, “Muy bien!!”, “Excelente”, “super”, “Perfecto!”).</li>
-                  <li><b>Feedback negativo:</b> Ocasionalmente hay comentarios críticos cuando la respuesta es incompleta o no cumple la expectativa (“Le pregunté por uno me entregó 3”, “No se pudo procesar la solicitud”, “Lo siento, ha ocurrido un error…”). Sin embargo, estos son escasos y suelen acompañarse de nueva instrucción o reintento.</li>
-                  <li><b>Actitud colaborativa:</b> El usuario frecuentemente da feedback constructivo, pide “intenta nuevamente”, explica el objetivo de la consulta y sugiere mejoras (“hazlo por año”, “muéstrame solo el top 5 y el resto como ‘Resto’”).</li>
-                  </ul>
-
-                  <h3>4. Conteo y Calificación de Conversaciones</h3>
-                  <table>
-                  <thead>
-                  <tr>
-                        <th>Calificación</th>
-                        <th>Ejemplo / Justificación</th>
-                        <th>Cantidad (aprox.)</th>
-                  </tr>
-                  </thead>
-                  <tbody>
-                  <tr>
-                        <td><b>Perfecta</b></td>
-                        <td>Respuestas rápidas, precisas, con ejecución y visualización de consultas (ej. ranking vendedores, gráficos por categoría, fichas técnicas SAG, segmentación clientes).</td>
-                        <td>~60%</td>
-                  </tr>
-                  <tr>
-                        <td><b>Aceptable</b></td>
-                        <td>Respuestas correctas pero con algún paso intermedio erróneo, consulta SQL inicial sin resultado pero corregida en el siguiente intento, o consultas sin registros (ej. “No se encontraron ventas para NPK 12-3-37 en San Felipe”).</td>
-                        <td>~20%</td>
-                  </tr>
-                  <tr>
-                        <td><b>Necesita mejorar</b></td>
-                        <td>Respuestas incompletas, errores temporales de sistema, respuestas en blanco o con error técnico, pero con reintentos exitosos posteriores.</td>
-                        <td>~15%</td>
-                  </tr>
-                  <tr>
-                        <td><b>Fallida</b></td>
-                        <td>Errores sistemáticos, respuestas incoherentes o sin ejecución de consulta, caídas de sistema, respuestas en inglés aisladas (“This message has a Dataframe”).</td>
-                        <td>~5%</td>
-                  </tr>
-                  </tbody>
-                  </table>
-                  <p><b>Nota:</b> La gran mayoría de las conversaciones tienen resolución exitosa, aunque en algunos casos requieren reiteración o ajuste de la consulta.</p>
-
-                  <h3>5. Observaciones, Insights y Recomendaciones</h3>
-                  <ul>
-                  <li><b>Alta interacción exploratoria:</b> El usuario utiliza el sistema para pruebas, exploración de tipos de gráficos y validación de capacidades, lo que evidencia confianza y curiosidad en las funcionalidades del asistente.</li>
-                  <li><b>Valor en la visualización:</b> Los gráficos (torta, barras, líneas, burbujas, gauge) son altamente valorados y solicitados, especialmente para comparaciones interanuales, seguimiento de KPIs y análisis de mix de ventas.</li>
-                  <li><b>Soporte técnico y comercial:</b> El asistente cumple un rol dual: entrega soporte técnico (fichas, ingredientes, normativas) y comercial (ventas, clientes, vendedores, KPIs), lo que enriquece la experiencia del usuario.</li>
-                  <li><b>Oportunidad de mejora:</b> Mejorar la robustez frente a consultas sin resultados, manejo de errores técnicos y mensajes de retroalimentación más claros cuando una consulta no puede ejecutarse.</li>
-                  <li><b>Potencial para dashboards ejecutivos:</b> El usuario explora activamente ejemplos de indicadores visuales (gauge) y gráficos avanzados, 
-                  lo que sugiere que la integración de dashboards ejecutivos sería de alto valor para la toma de decisiones.</li>
-                  <li><b>Feedback como motor de mejora:</b> El usuario entrega feedback explícito en el chat, lo que permite ajustar respuestas y mejorar la experiencia iterativamente.</li>
-                  </ul>
-
-                  <h3>Conclusión</h3>
-                  <p>
-                  El análisis de las conversaciones muestra un uso intensivo y avanzado del asistente AI para consultas comerciales, técnicas y de visualización. El sistema responde satisfactoriamente en la mayoría de los casos, con alto grado de precisión y utilidad para el usuario. La experiencia es positiva, con oportunidades puntuales de mejora en robustez y manejo de errores. El nivel de interacción y la diversidad de consultas evidencian que el asistente es una herramienta clave para la gestión comercial, operativa y técnica, y que la visualización de indicadores y datos es altamente valorada por los usuarios.
-
                                     
                   </div>
             </div>
@@ -861,6 +807,7 @@ const renderGraphsInOrder = (data, anterior = null) => {
       </div>
     `;
 
+    loadAnalisisIA();
     cargarTickerKPI();
 
     Plotly.newPlot(
@@ -980,8 +927,8 @@ const handleMetricsReport = async () => {
 
 async function analisis() {
     console.log("🔄 Cargando reporte...");
-    let startDate = "2025-06-01";
-    let endDate = "2025-06-30";
+    let startDate = "2025-08-01";
+    let endDate = "2025-08-10";
 
     const response = await fetch("/api/analisis", {
         method: "POST",
@@ -1005,6 +952,41 @@ async function analisis() {
     container.innerHTML = data.texto;
     console.log("👌 Reporte Cargado...");
 }
+
+
+function loadAnalisisIA() {
+  const cont = document.getElementById("analisis_ia");
+  if (!cont) return;
+
+  // Loader
+  cont.innerHTML = '<em style="color:#9ca3af">Cargando análisis…</em>';
+
+  fetch("/api/get_last_analisis_ia", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({}),
+  })
+    .then(async (r) => {
+      let body = {};
+      try { body = await r.json(); } catch (_) {}
+      return { ok: r.ok, status: r.status, body };
+    })
+    .then(({ ok, status, body }) => {
+      if (!ok) {
+        if (status === 401) { window.location.href = "/login"; return; }
+        cont.innerHTML = '<span style="color:#ef4444">No fue posible cargar el análisis.</span>';
+        return;
+      }
+      const html = body.analisis || body.texto || "";
+      cont.innerHTML = html || '<span style="color:#9ca3af">Sin análisis disponible.</span>';
+    })
+    .catch((err) => {
+      console.error("analisis_ia:", err);
+      cont.innerHTML = '<span style="color:#ef4444">Error al cargar el análisis.</span>';
+    });
+}
+
 
 function renderTimeSeries(data, anterior = null) {
     // Serie principal (último reporte)
@@ -1118,15 +1100,6 @@ async function cargarTickerKPI() {
     }
 }
 
-/*
-  <!-- Aquí van los KPIs en span, por JS o directo para prueba -->
-  <span class="kpi-item">Hoy 19-06-2025</span>
-  <span class="kpi-item verde">Conversaciones Hoy: 35 <span class="pct verde">+3% ↑</span></span>
-  <span class="kpi-item azul">Acumulado: 89 <span class="pct verde">+2% ↑</span></span>
-  <span class="kpi-item">Interacciones Hoy: 5 <span class="pct rojo">-1% ↓</span></span>
-  <span class="kpi-item azul">Acumulado: 56 <span class="pct verde">+2% ↑</span></span>
-  <span class="kpi-item gris">Errores: 0</span>
-  */
 
 document.addEventListener("DOMContentLoaded", () => {
     renderGraphsNew();

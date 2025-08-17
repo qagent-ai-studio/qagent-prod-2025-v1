@@ -165,8 +165,8 @@
             "chat": "Chat",
             "readme": "Léame",
             "theme": {
-                "light": "Tema oscuro",
-                "dark": "Tema Claro",
+                "light": "Tema Claro",
+                "dark": "Tema Oscuro",
                 "system": "Tema del sistema"
             }
         },

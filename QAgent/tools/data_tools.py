@@ -283,14 +283,9 @@ class GetDataAzureSQLServer(BaseTool):
             filas = len(resultados)           
             
             
-            if filas > 100:                
+            if filas > 20:                
                 url_archo_excel = await generar_excel_desde_mysql(resultados)    
                 resultados.insert(0, {"Instrucción adicional": f" # Atención, esto es muy importante para el usuario: - El resultado tiene {filas} filas. **Despliega solo las primeras 20 filas e informa al usuario que puede descargar el archivo excel con todos los datos en el siguiente link [Descargar Excel]({url_archo_excel}) renderiza el link en formato md.**"})        
-            elif filas >= 50:
-                url_archo_excel = await generar_excel_desde_mysql(resultados)    
-                resultados.insert(0, {"Instrucción adicional": f" # Atención, esto es muy importante para el usuario: - El resultado tiene {filas} filas. **Despliega solo las primeras 20 filas e informa al usuario que puede descargar el archivo excel con todos los datos en el siguiente link [Descargar Excel]({url_archo_excel}) renderiza el link en formato md.**"})        
-            elif filas >= 15:               
-                resultados.insert(0, {"Instrucción adicional": f"El resultado tiene {filas} filas. Debes utilizar la herramienta createDataFrame() para paginar los resultados, no formato markdown. **debe estar en formato dict serializado en JSON. Nunca lo envíes como un string anidado ni como tabla Markdown y limpia los campos null.** "})
             else:
                 resultados.insert(0, {"Instrucción adicional": f"El resultado tiene {filas} filas. Recuerda que para entregar listas de menos de 20 registros debes utilizar formato markdown"})
             

@@ -115,6 +115,7 @@ custom_meta_image_url = "https://qagent.store/public/qagent.png"
 # Specify optional one or more custom links in the header.
 [[UI.header_links]]
      name = "Ver mi gráficos fijados"
+     id="graficos_fijados"
      display_name = ""
      icon_url = "/public/chart.svg"
      url = "/graphs"

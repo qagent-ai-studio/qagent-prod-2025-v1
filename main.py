@@ -17,7 +17,7 @@ import traceback
 from uuid import UUID
 import pandas as pd
 import numpy as np
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 
 # Para la presentación de gráficos 
 # asegurarse de instalar pip install plotly[kaleido]
@@ -47,14 +47,14 @@ templates = Jinja2Templates(directory="templates")
 
 # Configuración de SQLAlchemy
 db_uri = config.get('CHAINLIT_DB_URI')
-print("\n🔧 Configuración de base de datos:")
-print(f"URI de conexión: {db_uri}")
+# print("\n🔧 Configuración de base de datos:")
+# print(f"URI de conexión: {db_uri}")
 
 # Si la URI usa asyncpg, cambiarla a psycopg2
 if 'postgresql+asyncpg' in db_uri:
     print("⚠️  Detectada URI para asyncpg, cambiando a psycopg2...")
     db_uri = db_uri.replace('postgresql+asyncpg', 'postgresql+psycopg2')
-    print(f"Nueva URI: {db_uri}")
+    # print(f"Nueva URI: {db_uri}")
 
 # Crear el engine con echo=True para ver las consultas SQL
 engine = create_engine(db_uri, echo=True)
@@ -539,7 +539,28 @@ def analisis_ia(payload: dict = Body(...), user=Depends(get_user_from_cookie)):
         )
 
         res = completion.choices[0].message.content     
-        print(f"res: {res}")   
+        #print(f"res: {res}")   
+       
+        # Fecha a usar (usa fecha_fin si viene; si no, hoy)
+        fecha_reporte = (
+            datetime.strptime(fecha_fin, "%Y-%m-%d").date()
+            if fecha_fin else date.today()
+        )
+
+        html_analisis = (res or "").encode("utf-8", errors="replace").decode("utf-8")
+
+        with engine.begin() as conn:
+            conn.execute(
+                text("""
+                    INSERT INTO public.analisis_ia (fecha, analisis)
+                    VALUES (:fecha, :analisis)
+                    ON CONFLICT (fecha) DO UPDATE
+                    SET analisis = EXCLUDED.analisis,
+                        created_at = now();
+                """),
+                {"fecha": fecha_reporte, "analisis": html_analisis},
+            )
+        
         return JSONResponse(content={"texto":res},status_code=200)
     
     except Exception as e:
@@ -806,7 +827,7 @@ def get_last_and_previous_report(payload: dict = Body(...), user=Depends(get_use
     import json
     session = Session()
     try:
-        # 1. Trae el último reporte (más reciente)
+        # 1) Último
         QUERY_ULTIMO = text("""
             SELECT resumen, fecha_reporte
             FROM reportes_metrics
@@ -814,15 +835,21 @@ def get_last_and_previous_report(payload: dict = Body(...), user=Depends(get_use
             LIMIT 1
         """)
         result_ultimo = session.execute(QUERY_ULTIMO).first()
-        if result_ultimo is None:
-            return JSONResponse(content={"error": "No hay reportes en la base de datos."}, status_code=404)
+
+        if not result_ultimo:
+            # Estructura estable sin datos
+            return JSONResponse(content={"ultimo": None, "anterior": None}, status_code=200)
 
         resumen_ultimo, fecha_ultimo = result_ultimo
         if isinstance(resumen_ultimo, str):
-            resumen_ultimo = json.loads(resumen_ultimo)
-        resumen_ultimo["fecha_reporte"] = str(fecha_ultimo)
+            try:
+                resumen_ultimo = json.loads(resumen_ultimo)
+            except Exception:
+                resumen_ultimo = {}  # fallback si quedó texto inválido
+        if isinstance(resumen_ultimo, dict):
+            resumen_ultimo["fecha_reporte"] = str(fecha_ultimo)
 
-        # 2. Busca el reporte inmediatamente anterior
+        # 2) Anterior
         QUERY_ANTERIOR = text("""
             SELECT resumen, fecha_reporte
             FROM reportes_metrics
@@ -831,17 +858,51 @@ def get_last_and_previous_report(payload: dict = Body(...), user=Depends(get_use
             LIMIT 1
         """)
         result_anterior = session.execute(QUERY_ANTERIOR, {"fecha_ultimo": fecha_ultimo}).first()
-        if result_anterior:
-            resumen_anterior, fecha_anterior = result_anterior
-            if isinstance(resumen_anterior, str):
-                resumen_anterior = json.loads(resumen_anterior)
-            resumen_anterior["fecha_reporte"] = str(fecha_anterior)
-        else:
-            resumen_anterior = None
 
+        resumen_anterior = None
+        if result_anterior:
+            r_anterior, f_anterior = result_anterior
+            if isinstance(r_anterior, str):
+                try:
+                    r_anterior = json.loads(r_anterior)
+                except Exception:
+                    r_anterior = {}
+            if isinstance(r_anterior, dict):
+                r_anterior["fecha_reporte"] = str(f_anterior)
+            resumen_anterior = r_anterior
+
+        return JSONResponse(content={"ultimo": resumen_ultimo, "anterior": resumen_anterior}, status_code=200)
+
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+    finally:
+        session.close()
+
+from fastapi import Body, Depends
+from fastapi.responses import JSONResponse
+from sqlalchemy import text
+
+@app.post("/api/get_last_analisis_ia")
+def get_last_analisis_ia(payload: dict = Body(None), user=Depends(get_user_from_cookie)):
+    QUERY = text("""
+        SELECT id, fecha, analisis
+        FROM public.analisis_ia
+        ORDER BY fecha DESC, id DESC
+        LIMIT 1
+    """)
+    session = Session()
+    try:
+        row = session.execute(QUERY).first()
+        if row is None:
+            return JSONResponse(content={"error": "No hay análisis en la base de datos."}, status_code=404)
+
+        id_, fecha, analisis = row
+        # Devolvemos ambos nombres por compatibilidad con el front:
         return JSONResponse(content={
-            "ultimo": resumen_ultimo,
-            "anterior": resumen_anterior
+            "id": id_,
+            "fecha": str(fecha),
+            "analisis": analisis,
+            "texto": analisis
         }, status_code=200)
 
     except Exception as e:

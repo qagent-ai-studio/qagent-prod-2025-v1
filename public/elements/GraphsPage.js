@@ -3,7 +3,9 @@ console.log("📊 Página de Gráficos - Versión QDark");
 
 // Estado para controlar el tamaño de los gráficos
 let graphSizes = {}; // {graphId: size} donde size puede ser 1, 2, o 3 (columnas)
-const selectedGraphs = new Set(); // ← Aquí
+let labelsOn = {}; 
+const selectedGraphs = new Set(); 
+
 
 const renderGraphsNew = async () => {
     const root = document.getElementById("root");
@@ -184,9 +186,7 @@ const renderGraphsNew = async () => {
         z-index: 10 !important;
       }
 
-      .plot-container {
-        filter: invert(91%) hue-rotate(180deg);
-      }
+      
       .graph-card [id^="graph-new-"] .main-svg {
           border-radius: 2px !important;
       }
@@ -421,7 +421,15 @@ const renderGraphsInOrder = () => {
 
                     <div style="width: 1px; height: 20px; background: #e5e7eb;"></div>
 
-                 <img 
+                    <img 
+                        src="${labelsOn[graph.id] ? 'public/tag-on.svg' : 'public/tag.svg'}"
+                        width="20" height="20"
+                        style="cursor: pointer; transition: opacity 0.2s;"
+                        title="${labelsOn[graph.id] ? 'Ocultar etiquetas' : 'Mostrar etiquetas'}"
+                        onclick="toggleLabels('${graph.id}')"
+                    />
+                    <div style="width: 1px; height: 20px; background: #e5e7eb;"></div>
+                    <img 
                         src="public/clipboard-plus.svg" 
                         width="20" 
                         height="20" 
@@ -560,7 +568,134 @@ const renderPlotlyGraph = (graph, size) => {
             margins = { t: 40, r: 50, b: 35, l: 45 };
     }
 
-    Plotly.newPlot(containerId, graph.figure.data);
+
+// === Defaults Dark para TODOS los gráficos ===
+const QAGENT_DARK_LAYOUT = {
+  template: 'plotly_dark',
+  paper_bgcolor: 'rgba(0,0,0,0)',
+  plot_bgcolor: 'rgba(0,0,0,0)',
+  font: { color: '#e5e7eb' },
+  colorway: ['#60a5fa','#34d399','#f472b6','#f59e0b','#a78bfa','#f87171','#22d3ee','#fde047'],
+  xaxis: {
+    gridcolor: '#2f2f2f', zerolinecolor: '#2f2f2f', linecolor: '#444',
+    tickfont: { color: '#cbd5e1' }, titlefont: { color: '#9ca3af' }
+  },
+  yaxis: {
+    gridcolor: '#2f2f2f', zerolinecolor: '#2f2f2f', linecolor: '#444',
+    tickfont: { color: '#cbd5e1' }, titlefont: { color: '#9ca3af' }
+  },
+  legend: { font: { color: '#e5e7eb' } }
+};
+
+const QAGENT_DEFAULT_CONFIG = {
+  responsive: true,
+  displaylogo: false,
+  locale: 'es'
+};
+
+// Merge profundo simple
+function mergeDeep(target, source){
+  const t = target || {};
+  for (const k in source){
+    const v = source[k];
+    if (v && typeof v === 'object' && !Array.isArray(v)){
+      t[k] = mergeDeep(t[k] || {}, v);
+    } else if (v !== undefined){
+      t[k] = v;
+    }
+  }
+  return t;
+}
+
+// Ajustes por tipo (para que etiquetas en tortas/treemap se lean en dark)
+function tweakTrace(trace){
+  const t = { ...trace };
+  if (t.type === 'pie' || t.type === 'treemap' || t.type === 'sunburst'){
+    t.textfont = { color: '#e5e7eb', ...(t.textfont||{}) };
+    t.insidetextfont = { color: '#ffffff', ...(t.insidetextfont||{}) };
+    t.outsidetextfont = { color: '#e5e7eb', ...(t.outsidetextfont||{}) };
+  }
+  return t;
+}
+
+
+// Quita "+text" del mode sin romper otras combinaciones
+function removeTextFromMode(mode) {
+  if (!mode) return mode;
+  return mode
+    .replace('lines+markers+text', 'lines+markers')
+    .replace('markers+text', 'markers')
+    .replace('lines+text', 'lines')
+    .replace('+text', '')
+    .replace('text', 'lines+markers'); // fallback razonable
+}
+
+// Clona data y aplica etiquetas si enabled=true
+function withLabels(data, enabled) {
+  return (data || []).map(src => {
+    const t = { ...src };
+
+    if (!enabled) {
+      // Apaga etiquetas en bar/scatter
+      if (t.type === 'bar') {
+        delete t.text;
+        delete t.textposition;
+      }
+      if (t.type === 'scatter') {
+        t.mode = removeTextFromMode(t.mode);
+        delete t.text;
+        delete t.textposition;
+      }
+      // Si quieres que el toggle afecte también pies/sunburst/treemap, descomenta:
+       if (t.type === 'pie' || t.type === 'treemap' || t.type === 'sunburst') {
+         t.textinfo = t.textinfo && t.textinfo.replace('text','').replace('label+percent+value','none');
+       }
+      return t;
+    }
+
+    // Encendido: agrega etiquetas
+    if (t.type === 'bar') {
+      // usa Y como texto por defecto
+      t.text = t.text ?? t.y;
+      t.textposition = t.textposition ?? 'auto';
+      t.textfont = { color: '#e5e7eb', ...(t.textfont || {}) };
+    }
+
+    if (t.type === 'scatter') {
+      // si hay puntos/linea, agrega texto
+      if (t.y) {
+        t.text = t.text ?? t.y;
+        t.mode = t.mode ? (t.mode.includes('text') ? t.mode : `${t.mode}+text`) : 'lines+markers+text';
+        t.textposition = t.textposition ?? 'top center';
+        t.textfont = { color: '#e5e7eb', ...(t.textfont || {}) };
+      }
+    }
+
+    return t;
+  });
+}
+
+
+// --- PARCHE GLOBAL ---
+// Aplica dark layout, paleta y config por defecto a TODOS los newPlot,
+// sin importar qué venga en tu JSON ni el tipo de gráfico.
+(function patchPlotlyNewPlot(){
+  const original = Plotly.newPlot;
+  Plotly.newPlot = function(container, data, layout={}, config={}){
+    // Permite saltar el tema si algún caso quiere controlar todo:
+    if (!(layout && layout.__skipDark)){
+      layout = mergeDeep(mergeDeep({}, QAGENT_DARK_LAYOUT), layout || {});
+    }
+    const dataPatched = (data || []).map(tweakTrace);
+    const configPatched = { ...QAGENT_DEFAULT_CONFIG, ...(config||{}) };
+    return original(container, dataPatched, layout, configPatched);
+  };
+})();
+
+
+
+    const dataPatched = withLabels(graph.figure.data, !!labelsOn[graph.id]);
+    Plotly.newPlot(containerId, dataPatched);
 
     // Ajuste adicional para asegurar que se mantiene dentro del contenedor
     setTimeout(() => {
@@ -858,6 +993,31 @@ function toggleGraphSelection(el) {
 
     console.log("📋 Gráficos seleccionados:", Array.from(selectedGraphs));
 }
+
+window.toggleLabels = (graphId) => {
+  labelsOn[graphId] = !labelsOn[graphId];
+
+  // Cambiar icono y título dinámicamente
+  const card = document.querySelector(`[data-graph-id="${graphId}"]`);
+  if (card) {
+    const btn = card.querySelector('img[onclick^="toggleLabels"]');
+    if (btn) {
+      btn.src = labelsOn[graphId] ? 'public/tag-on.svg' : 'public/tag.svg';
+      btn.title = labelsOn[graphId] ? 'Ocultar etiquetas' : 'Mostrar etiquetas';
+    }
+  }
+
+  // Re-render con el mismo tamaño
+  const graph = originalGraphsData.find(g => g.id === graphId);
+  if (graph && graph.figure) {
+    const size = graphSizes[graphId] || 1;
+    renderPlotlyGraph(graph, size);
+  }
+
+  // Persistir
+  saveGraphConfiguration();
+};
+
 
 async function handleDownloadSelectedGraphs() {
     if (selectedGraphs.size === 0) {

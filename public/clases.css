@@ -71,18 +71,196 @@ img.absolute.inset-0.h-full.w-full.object-cover {
 [data-val="pan"] {
     display: none !important;
 }
-/*
-.plot-container {
-    filter: invert(85%) hue-rotate(180deg);
-}
-.graph-card [id^="graph-new-"] .main-svg {
-    border-radius: 2px !important;
-}
-.js-plotly-plot {
-    background: transparent !important;
+
+html.dark a[href="/graphs"] img {
+  content: url("/public/chart.svg");
 }
 
-.modebar-btn--logo {
-    display: none !important;
+/* Si <html> tiene la clase light → usa el ícono oscuro */
+html.light a[href="/graphs"] img {
+  content: url("/public/chart-oscuro.svg");
 }
-*/
+
+
+/* Oculta las <img> dentro del botón de perfiles */
+#chat-profiles img {
+  width: 0 !important;
+  height: 0 !important;
+  opacity: 0 !important;
+  position: absolute !important;
+}
+
+/* El contenedor donde insertaremos el pseudo-elemento (el <div> que envuelve ícono + texto) */
+#chat-profiles span > div {
+  position: relative;
+}
+
+/* Pseudo-elemento que hará de ícono */
+#chat-profiles span > div::before {
+  content: "";
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  margin-right: 0.5rem; /* espacio antes del texto */
+  vertical-align: middle;
+}
+
+/* ========== 1) Header: link /graphs ========== */
+a[href="/graphs"] img {
+  width: 0 !important;
+  height: 0 !important;
+  opacity: 0 !important;
+  position: absolute !important;
+}
+a[href="/graphs"]::before {
+  content: "";
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  vertical-align: middle;
+}
+html.dark a[href="/graphs"]::before {
+  background-image: url("/public/chart.svg");
+}
+html.light a[href="/graphs"]::before {
+  background-image: url("/public/chart-oscuro.svg");
+}
+
+/* ========== 2) Botón de perfiles (#chat-profiles) ========== */
+/* Ocultamos el <img> original del botón */
+#chat-profiles img {
+  width: 0 !important;
+  height: 0 !important;
+  opacity: 0 !important;
+  position: absolute !important;
+}
+
+/* Contenedor que mostrará el pseudo-ícono */
+#chat-profiles span > div {
+  position: relative;
+}
+#chat-profiles span > div::before {
+  content: "";
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  margin-right: 0.5rem;
+  vertical-align: middle;
+  background-image: var(--icon-url);
+}
+
+/* BOT */
+html.dark #chat-profiles span > div:has(img[src$="/bot.svg"]),
+html.dark #chat-profiles span > div:has(img[alt*="Modo Normal"]) {
+  --icon-url: url("/public/bot.svg");
+}
+html.light #chat-profiles span > div:has(img[src$="/bot.svg"]),
+html.light #chat-profiles span > div:has(img[alt*="Modo Normal"]) {
+  --icon-url: url("/public/bot-oscuro.svg");
+}
+
+/* BRAIN */
+html.dark #chat-profiles span > div:has(img[src$="/brain.svg"]),
+html.dark #chat-profiles span > div:has(img[alt*="Razonamiento"]) {
+  --icon-url: url("/public/brain.svg");
+}
+html.light #chat-profiles span > div:has(img[src$="/brain.svg"]),
+html.light #chat-profiles span > div:has(img[alt*="Razonamiento"]) {
+  --icon-url: url("/public/brain-oscuro.svg");
+}
+
+/* ========== 3) Welcome Screen (ícono central) ========== */
+/* Ocultamos el <img> del welcome-screen cuando sea bot.svg */
+#welcome-screen img[src$="/bot.svg"] {
+  width: 0 !important;
+  height: 0 !important;
+  opacity: 0 !important;
+  position: absolute !important;
+}
+
+/* El wrapper que contiene ese <img> (padre inmediato) mostrará el pseudo-ícono */
+#welcome-screen div:has(> img[src$="/bot.svg"]) {
+  position: relative;
+}
+
+/* Reemplazamos por un pseudo-ícono del mismo tamaño (h-16 w-16 => 64px) */
+#welcome-screen div:has(> img[src$="/bot.svg"])::before {
+  content: "";
+  display: inline-block;
+  width: 64px;
+  height: 64px;
+  background-size: cover;
+  background-repeat: no-repeat;
+  border-radius: 9999px; /* mantiene la forma redondeada */
+  background-image: var(--welcome-icon-url);
+}
+
+/* Tema oscuro -> bot.svg | Tema claro -> bot-oscuro.svg */
+html.dark #welcome-screen div:has(> img[src$="/bot.svg"]) {
+  --welcome-icon-url: url("/public/bot.svg");
+}
+html.light #welcome-screen div:has(> img[src$="/bot.svg"]) {
+  --welcome-icon-url: url("/public/bot-oscuro.svg");
+}
+
+/* ========== 4) Dropdown del selector de perfiles (menú Radix) ========== */
+/* El menú se renderiza en un portal; como no podemos inspeccionarlo,
+   apuntamos de forma segura a elementos con rol de lista/menú y
+   solo a íconos bot/brain. */
+
+/* Ocultamos el <img> original cuando sea bot/brain dentro de menús/listas */
+:where([role="listbox"], [role="menu"], [data-radix-popper-content]) img[src$="/bot.svg"],
+:where([role="listbox"], [role="menu"], [data-radix-popper-content]) img[src$="/brain.svg"] {
+  width: 0 !important;
+  height: 0 !important;
+  opacity: 0 !important;
+  position: absolute !important;
+}
+
+/* Usamos el contenedor inmediato de ese <img> para pintar el pseudo-ícono */
+:where([role="listbox"], [role="menu"], [data-radix-popper-content]) div:has(> img[src$="/bot.svg"]),
+:where([role="listbox"], [role="menu"], [data-radix-popper-content]) div:has(> img[src$="/brain.svg"]) {
+  position: relative;
+}
+:where([role="listbox"], [role="menu"], [data-radix-popper-content]) div:has(> img[src$="/bot.svg"])::before,
+:where([role="listbox"], [role="menu"], [data-radix-popper-content]) div:has(> img[src$="/brain.svg"])::before {
+  content: "";
+  display: inline-block;
+  width: 24px;    /* tamaño del ícono en el dropdown */
+  height: 24px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  margin-right: 0.5rem;
+  vertical-align: middle;
+  background-image: var(--menu-icon-url);
+}
+
+/* Tema oscuro (bot/brain base) */
+html.dark :where([role="listbox"], [role="menu"], [data-radix-popper-content]) div:has(> img[src$="/bot.svg"]) {
+  --menu-icon-url: url("/public/bot.svg");
+}
+html.dark :where([role="listbox"], [role="menu"], [data-radix-popper-content]) div:has(> img[src$="/brain.svg"]) {
+  --menu-icon-url: url("/public/brain.svg");
+}
+
+/* Tema claro (versiones -oscuro) */
+html.light :where([role="listbox"], [role="menu"], [data-radix-popper-content]) div:has(> img[src$="/bot.svg"]) {
+  --menu-icon-url: url("/public/bot-oscuro.svg");
+}
+html.light :where([role="listbox"], [role="menu"], [data-radix-popper-content]) div:has(> img[src$="/brain.svg"]) {
+  --menu-icon-url: url("/public/brain-oscuro.svg");
+}
+
+html.light .bg-accent {
+  background-color: hsl(0deg 0% 89.76%) !important;
+}
+
+#theme-toggle{
+    width: 4rem !important;
+}
