@@ -539,7 +539,7 @@ def analisis_ia(payload: dict = Body(...), user=Depends(get_user_from_cookie)):
         )
 
         res = completion.choices[0].message.content     
-        #print(f"res: {res}")   
+        print(f"res: {res}")   
        
         # Fecha a usar (usa fecha_fin si viene; si no, hoy)
         fecha_reporte = (

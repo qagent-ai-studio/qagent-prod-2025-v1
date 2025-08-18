@@ -44,6 +44,12 @@ class GetDataLocalMySQLTool(BaseTool):
         db_connection = None
         cursor = None
         
+        user = cl.user_session.get("user")
+        logger.info(f"\n #######################")
+        logger.info(f"EL USUARIO ES : {user}")
+        logger.info(f"####################### \n")
+        
+        
         try:
             db_connection = mysql.connector.connect(
                 host=config.get("DB_HOST"),

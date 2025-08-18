@@ -51,7 +51,7 @@ def get_previous_month_range():
     last_month_start = last_month_end.replace(day=1)
     return last_month_start, last_month_end
 
-def generate_report(fecha_inicio: date, fecha_fin: date, cliente: str = "QAgent"):
+def generate_report(fecha_inicio: date, fecha_fin: date, cliente: str = "GLobal Reefers"):
     # ⚠️ Sin SET client_encoding ni connect_args forzando LATIN1/WIN1252
     QUERY = text("""
         SELECT
