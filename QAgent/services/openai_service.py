@@ -6,6 +6,7 @@ Encapsula todas las llamadas a la API de OpenAI.
 import logging
 from typing import Dict, Any, Optional, List
 from pathlib import Path
+from chainlit.element import Element
 
 from openai import OpenAI, AsyncOpenAI, OpenAIError
 from openai import OpenAI, AsyncOpenAI, AsyncAssistantEventHandler,  OpenAIError, AzureOpenAI, AsyncAzureOpenAI
@@ -109,7 +110,7 @@ class OpenAIService:
             logger.error(f"Error al crear hilo: {e}")
             raise
     
-    async def add_message_to_thread(self, thread_id: str, content: str) -> Any:
+    async def add_message_to_thread(self, thread_id: str, role: str, content: str, attachments: Optional[List[Dict[str, Any]]] = None) -> Any:
         """
         Añade un mensaje a un hilo existente
         
@@ -121,17 +122,19 @@ class OpenAIService:
             Mensaje creado
         """
         try:
+            
             message = await self._async_client.beta.threads.messages.create(
                 thread_id=thread_id,
-                role="user",
-                content=content
+                role=role,
+                content=content,
+                attachments=attachments or []
             )
             return message
         except OpenAIError as e:
             logger.error(f"Error al añadir mensaje a hilo: {e}")
             raise
     
-    async def run_thread(self, thread_id: str, instructions: str, event_handler_creator) -> None:
+    async def run_thread(self, thread_id: str, event_handler_creator) -> None:
         """
         Ejecuta un hilo con instrucciones específicas
         
@@ -146,8 +149,7 @@ class OpenAIService:
             
             async with self._async_client.beta.threads.runs.stream(
                 thread_id=thread_id,
-                assistant_id=self._assistant.id,
-                instructions=instructions,
+                assistant_id=self._assistant.id,               
                 event_handler=event_handler
             ) as stream:
                 await stream.until_done()
@@ -225,3 +227,16 @@ class OpenAIService:
         except OpenAIError as e:
             logger.error(f"Error al obtener contenido del archivo: {e}")
             raise
+
+    async def upload_files(self, files: List[Element]):
+        file_ids = []
+        try:
+            for file in files:
+                uploaded_file_id = await self._async_client.files.create(
+                    file=Path(file.path), purpose="assistants"
+                )
+                file_ids.append(uploaded_file_id.id)
+            return file_ids    
+        except OpenAIError as e:
+            logger.error(f"Error al cargar el archivo: {e}")
+            raise   

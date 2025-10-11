@@ -109,7 +109,7 @@ class SendMailTool(BaseTool):
             from QAgent.send_mail.send_mailjet import enviar_mail
             
             # Enviar el correo
-            enviar_mail(nombre, email, texto)
+            await enviar_mail(email, nombre, texto)
             
             logger.info(f"Correo enviado a {email}")
             return f"El mail fue enviado a {nombre} con el siguiente texto: {texto}"

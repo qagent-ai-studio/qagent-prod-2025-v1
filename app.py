@@ -12,7 +12,7 @@ import random
 import traceback
 import uuid
 import bcrypt
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Callable
 
@@ -37,8 +37,8 @@ from QAgent.config.config_manager import config as app_config
 from QAgent.events.event_handler import EventHandlerFactory
 from QAgent.events.strategies.openai_event_strategy import OpenAIEventStrategy
 from QAgent.services.openai_service import OpenAIService
-from QAgent.tools import CUSTOM_TOOLS, register_user, almacenar_interaccion, qtokens 
-from QAgent.prompt import instrucciones, instrucciones_adicionales, instrucciones_telegram
+from QAgent.tools import CUSTOM_TOOLS, register_user, submit_survey
+from QAgent.prompt import instrucciones, instrucciones_adicionales, instrucciones_telegram, instrucciones_quinta, instrucciones_correos_de_chile, instrucciones_cpp, preguntas_frecuentes
 from QAgent.utils.logging_utils import configure_logging, get_random_response
 from QAgent.repositories.postgres_repository import PostgresRepository
 
@@ -160,12 +160,6 @@ async def auth_callback(username: str, password: str):
         
     except Exception as e:
         logger.error(f"Error de autenticación: {e}")
-        # Si ocurre una excepción, permitir acceso como admin en caso de credenciales especiales
-        if username == "admin" and password == "admin":
-            return cl.User(
-                identifier="admin",
-                metadata={"role": "admin", "provider": "credentials"}
-            )
         return None
 
 @cl.action_callback("fijar_grafico")
@@ -173,6 +167,7 @@ async def on_fijar_grafico(action: cl.Action):
     # Obtener thread_id y element_id del payload
     thread_id = action.payload.get("thread_id")
     element_id = action.payload.get("element_id")
+    plotly_sql = action.payload.get("plotly_sql")
 
     if not thread_id or not element_id:
         await cl.Message(content="❌ Error: Información incompleta para fijar el gráfico").send()
@@ -181,14 +176,15 @@ async def on_fijar_grafico(action: cl.Action):
     try:
         session = Session()
         session.execute(
-            text('UPDATE elements SET pin = 1 WHERE id = :id AND "threadId" = :thread_id'),
-            {"id": element_id, "thread_id": thread_id}
+            text('UPDATE elements SET pin = 1, pin_sql = :plotly_sql WHERE id = :id AND "threadId" = :thread_id'),
+            {"plotly_sql": plotly_sql, "id": element_id, "thread_id": thread_id}
         )
         session.commit()
        
         await cl.context.emitter.send_toast(
             message="Gráfico fijado correctamente!",
-            type="success",  # Can be "info", "success", "warning", or "error"
+            type="success",
+           
            
         )
         await action.remove()
@@ -201,6 +197,56 @@ async def on_fijar_grafico(action: cl.Action):
     finally:
         session.close()
 
+@cl.action_callback("submit_survey")
+async def on_submit_survey(action: cl.Action):
+    try:
+        payload = action.payload or {}
+        # 1) Datos del formulario (front) – SurveyForm.jsx
+        score = int(payload.get("score", 0))
+        reason = (payload.get("reason") or "").strip()
+        magic_wish = (payload.get("magicWish") or "").strip()
+
+        # 2) Identifier desde la sesión
+        user = cl.user_session.get("user") or {}
+        if hasattr(user, "identifier"):
+            identifier = getattr(user, "identifier") or "anónimo"
+        elif isinstance(user, dict):
+            identifier = user.get("identifier") or "anónimo"
+        else:
+            identifier = "anónimo"
+
+        # 3) user_metadata desde la sesión (como dijiste)
+        user_data = cl.user_session.get("user_data") or {}
+        raw_user_metadata = user_data.get("user_metadata")
+        if isinstance(raw_user_metadata, str):
+            try:
+                user_metadata = json.loads(raw_user_metadata)
+            except Exception:
+                user_metadata = {}
+        elif isinstance(raw_user_metadata, dict):
+            user_metadata = raw_user_metadata
+        else:
+            user_metadata = {}
+
+        # 4) created_at en texto ISO con Z
+        created_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+        # 5) Guardar vía herramienta
+        result = await submit_survey.execute(
+            identifier=identifier,
+            user_metadata=user_metadata,
+            created_at=created_at,
+            score=score,
+            reason=reason,
+            magic_wish=magic_wish
+        )
+
+        # Responder al front
+        return result if isinstance(result, dict) else {"success": True}
+
+    except Exception as e:
+        await cl.Message(content=f"❌ Error al guardar encuesta: {e}").send()
+        return {"success": False, "message": str(e)}
 
 @cl.set_chat_profiles
 async def chat_profile():
@@ -217,6 +263,33 @@ async def chat_profile():
         ),
     ]
 
+
+async def process_files(files: List[Element]):
+    # Upload files if any and get file_ids
+    file_ids = []
+    if len(files) > 0:
+        file_ids = await openai_service.upload_files(files)
+        logger.info(f"--> File_ids:{file_ids}")  
+         
+
+    return [
+        {
+            "file_id": file_id,
+            "tools": [{"type": "code_interpreter"}, {"type": "file_search"}]
+            if file.mime
+            in [
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "text/markdown",
+                "application/pdf",
+                "text/plain",
+            ]
+            else [{"type": "code_interpreter"}],
+        }
+        for file_id, file in zip(file_ids, files)
+    ]
+    
+    
+    
 
 # Continuación de la conversación
 @cl.on_chat_resume
@@ -262,6 +335,11 @@ async def set_starters():
             label="Preguntas más frecuentes",
             message="Lista las preguntas más frecuentes que puedes responder.",
             icon="/public/idea.svg",
+        ),
+         cl.Starter(
+            label="Indicadores economicos",
+            message="Necesito los indicadores economicos de hoy",
+            icon="/public/indicadores.svg",
         )
     ]
 
@@ -322,8 +400,7 @@ async def on_chat_start():
     logger.info(f"===== INICIO DE SESIÓN =====")
     logger.info(f"Usuario: {user_id} (Rol: {user_role})")
     
-    
-   
+       
     
     # Crear thread de OpenAI (API externa)
     openai_thread_id = cl.user_session.get('openai_thread_id')
@@ -396,6 +473,8 @@ async def main(message: cl.Message):
     print(f"Output: {getattr(message, 'output', '')}")
     import pprint
     pprint.pprint(vars(message))
+    
+    
     
     # Obtener thread ID del contexto
     context_thread_id = None
@@ -506,6 +585,12 @@ async def main(message: cl.Message):
         await cl.Message(content="", elements=[user_form]).send()
         return
     
+    if message.content.strip() == "/test_survey":
+        cl.user_session.set("user", {"identifier": "tester@example.com"})
+        cl.user_session.set("user_data", {"user_metadata": {"role": "analista", "society": "CL10"}})
+        el = cl.CustomElement(name="SurveyForm")
+        await cl.Message(content="Por favor responde la encuesta:", elements=[el]).send()
+        return
     
     # Procesamiento normal
     message_content = solicitud if solicitud else message.content
@@ -513,9 +598,9 @@ async def main(message: cl.Message):
     chat_profile = cl.user_session.get("chat_profile")      
     
     if chat_profile == "Modo Razonamiento profundo":
-        RAZONAMIENTO = "\n# Piensa bien tu respuesta y explica tu razonamiento, antes de resolver la tarea." 
+        RAZONAMIENTO = "--- # Primero Piensa bien tu respuesta y explica tu razonamiento antes de resolver la tarea. ---" 
     else:    
-        RAZONAMIENTO = "\n# Piensa tu respuesta, pero no es necesario que me expliques tu razonamiento." 
+        RAZONAMIENTO = "" 
     
     # Obtener ID del thread de OpenAI
     openai_thread_id = cl.user_session.get('openai_thread_id')
@@ -524,15 +609,67 @@ async def main(message: cl.Message):
         openai_thread_id = await openai_service.create_thread()
         cl.user_session.set('openai_thread_id', openai_thread_id)
     
+    
+    now = datetime.now() 
+    hoy = now.strftime("%d-%m-%Y %H:%M")
+    hoy = f"--- ## Esta es la fecha de hoy: {hoy} --- "    
+    
+    #---------------------------------------------------------------#
+    # Instrucciones adicionales
+    # Definir aqui,  casos especiales para instrucciones adicionales
+    
+    # Normalizaciones previas
+    raw_content = (message.content or "").strip()
+   
+    # 1) Construir additional_instructions de forma segura
+    instrucciones_parts = []
+
+    # Caso Telegram
+    if raw_content.startswith("TELEGRAM_MSN:"):
+        logger.info("---> Aplica instrucciones TELEGRAM_MSN ---")
+        instrucciones_parts.append(instrucciones_telegram)
+       
+
+    # Caso “preguntas frecuentes”
+    if raw_content == "Lista las preguntas más frecuentes que puedes responder.":
+        instrucciones_parts.append(preguntas_frecuentes)
+
+    # 2) Attachments (lista vacía si no hay)
+    attachments = await process_files([el for el in message.elements if el.path]) or []
+    print(f"->> Attachments: {attachments}")
+
+    # 3) Hint por archivos
+    if attachments:
+        instrucciones_parts.append(
+            "\n\n[NOTA]: El usuario ha cargado archivo(s). "
+            "Revísalos y responde considerando su contenido."
+        )
+
+    # 4) Componer instrucciones + “hoy”
+    additional_instructions = "".join(instrucciones_parts)
+    assistant_payload = (hoy or "") + additional_instructions
+
     try:
-        # Añadir el mensaje del usuario al hilo de OpenAI
+        # Mensaje “assistant” con contexto + instrucciones
         await openai_service.add_message_to_thread(
             thread_id=openai_thread_id,
-            content=message_content + RAZONAMIENTO
+            role="assistant",
+            content=assistant_payload,
+            attachments=[],  # siempre lista vacía aquí
         )
+
+        # Mensaje del usuario (puedes usar raw_content o message_content+RAZONAMIENTO)
+        await openai_service.add_message_to_thread(
+            thread_id=openai_thread_id,
+            role="user",
+            content=message_content + RAZONAMIENTO,
+            attachments=attachments,  # [] si no hay archivos
+        )
+
     except OpenAIError as e:
         logger.error(f"Error al añadir mensaje al hilo de OpenAI: {e}")
         logger.error(traceback.format_exc())
+
         
         if "Can't add messages to" in str(e):
             logger.info(f"Intento de agregar mensajes mientras un run está activo: {e}")
@@ -553,7 +690,9 @@ async def main(message: cl.Message):
                     await asyncio.sleep(1)
                     await openai_service.add_message_to_thread(
                         thread_id=openai_thread_id,
-                        content=message.content
+                        role='user',  
+                        content=message.content,
+                        attachments=attachments,
                     )
                 except Exception as cancel_e:
                     logger.error(f"Error al cancelar ejecución: {cancel_e}")
@@ -561,66 +700,11 @@ async def main(message: cl.Message):
                     await cl.Message("Lo siento, estoy teniendo problemas técnicos. Por favor, intenta de nuevo en unos momentos.").send()
                     return
     
-    # Almacenar la interacción
-    #!Deprcated No se usa más
-    '''
-    agente = cl.user_session.get("agente", "op")
-    total_tokens = qtokens(message.content)
-    try:
-        await almacenar_interaccion(
-            message.content, "", "", chainlit_thread_id, total_tokens, agente
-        )
-    except Exception as e:
-        logger.error(f"Error al almacenar interacción: {e}")
-        logger.error(traceback.format_exc())
-    '''
-    
-    # Seleccionar instrucciones según el agente
-    agent_instructions = instrucciones  # Usar las mismas instrucciones para todos los agentes por ahora
-    main_instructions = assistant.instructions
-    
-
-    #---------------------------------------------------------------#
-    #---------------------------------------------------------------#
-    # Instrucciones adicionales
-    # Definir aqui,  casos especiales para instrucciones adicionales
-    # Ejemplo
-    
-    '''
-    if "informe del cliente" in message.content.lower():
-        logger.info(f"---> Aplica instrucciones adicionales---\n")
-        additional_instructions = instrucciones_adicionales       
-    else:
-        additional_instructions = ""
-    '''    
-        
-    if  message.content == "Lista las preguntas más frecuentes que puedes responder.":
-        additional_instructions = instrucciones_adicionales       
-    else:
-        additional_instructions = ""
-            
-    
-    if message.content.startswith("TELEGRAM_MSN:"):
-        # Aplicar lógica específica
-        logger.info(f"---> Aplica instrucciones TELEGRAM_MSN---\n")
-        main_instructions = instrucciones_telegram    
-          
-    chat_profile = cl.user_session.get("chat_profile")      
-    
-    if chat_profile == "Modo Razonamiento profundo":
-        modo = "Estas en **Modo razonamiento profundo**: # Primero Piensa bien tu respuesta y explica tu razonamiento antes de resolver la tarea." 
-    else:    
-        modo = "Estas en **Modo normal**: Piensa bien tu respuesta pero no expliques tu razonamiento al usuario, el modo razonamiento profundo esta desactivado." 
-    
-    now = datetime.now() 
-    hoy = now.strftime("%d-%m-%Y %H:%M")
-    hoy = f"--- ## Esta es la fecha de hoy: {hoy} --- "
     
     try:
         # Ejecutar el hilo de OpenAI usando la función para crear manejadores de eventos
         await openai_service.run_thread(
             thread_id=openai_thread_id,
-            instructions=modo + hoy + main_instructions + agent_instructions + additional_instructions,
             event_handler_creator=create_event_handler
         )
     except OpenAIError as e:

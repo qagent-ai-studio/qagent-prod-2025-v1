@@ -7,7 +7,7 @@ from QAgent.tools.tool_factory import ToolFactory
 from QAgent.tools.data_tools import getdataMSQL, getdataASQLS, getdataASQLS_AD, getdataGSQLS,createDataFrame, explainSQL, getdataSQLSLocal, explainGCPSQL, explainASQL
 from QAgent.tools.plotting_tools import draw_plotly_chart
 from QAgent.tools.utility_tools import getCurrentDate, send_mail, qtokens, almacenar_interaccion, get_mysql_schema, getMySQLTablesAndColumns, getMySQLRelationships, getASQLSTablesAndColumns, getASQLSRelationships
-from QAgent.tools.user_tools import register_user
+from QAgent.tools.user_tools import register_user, submit_survey
 from QAgent.tools.clima_tool import clima_actual, pronostico
 from QAgent.tools.web_search_tool import web_search
 from QAgent.tools.google_anatytic_v4_tools import google_analytic_report, google_analytic_concept
@@ -15,6 +15,12 @@ from QAgent.tools.multimedia_tools import video_tool, pdf_tool
 from QAgent.tools.customer_tools import busca_rut_cliente, segmenta_cliente, busca_sku, recursos_conaf
 from QAgent.tools.faiss_ai_search_tool import faiss_ai_search
 from QAgent.tools.blueraptor_tool import blueRaptor    
+from QAgent.tools.sky_tool import audit_excel_tool  
+from QAgent.tools.indicadores_tool import indicadores
+from QAgent.tools.correlacion_pearson_tool import correlacionPearson
+
+
+
 
 # Define las herramientas del asistente manteniendo la misma estructura que el original
 CUSTOM_TOOLS = {
@@ -26,6 +32,7 @@ CUSTOM_TOOLS = {
     'getdataGSQLS':getdataGSQLS,
     'send_mail': send_mail,
     'register_user': register_user,
+    'submit_survey':submit_survey,
     'clima_actual': clima_actual,
     'pronostico': pronostico,
     'web_search': web_search,
@@ -48,7 +55,10 @@ CUSTOM_TOOLS = {
     'getMySQLRelationships':getMySQLRelationships,
     'getASQLSTablesAndColumns':getASQLSTablesAndColumns, 
     'getASQLSRelationships':getASQLSRelationships,
-    'blueRaptor':blueRaptor
+    'blueRaptor':blueRaptor,
+    'audit_excel_tool':audit_excel_tool,
+    'indicadores':indicadores,
+    'correlacionPearson':correlacionPearson
 
 }
 
@@ -61,6 +71,7 @@ __all__ = [
     'almacenar_interaccion',
     'send_mail',
     'register_user',
+    'submit_survey',
     'clima_actual',
     'pronostico',
     'web_search',
@@ -85,5 +96,8 @@ __all__ = [
     'getMySQLRelationships',
     'getASQLSTablesAndColumns',
     'getASQLSRelationships',
-    'blueRaptor'
+    'blueRaptor',
+    'audit_excel_tool',
+    'indicadores',
+    'correlacionPearson'
 ]

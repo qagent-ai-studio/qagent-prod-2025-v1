@@ -1,826 +1,543 @@
-// 🔥 ARCHIVO NUEVO PARA TESTING - GraphsPageNEW.js
-console.log("📊 Página de Gráficos - Versión QDark");
+// GraphsPage.js — Unificado CLARO/OSCURO según preferencia (localStorage/cookie)
+// Detecta el tema desde localStorage('vite-ui-theme') o cookie y renderiza
+// una sola página que aplica estilos, íconos y Plotly layout por tema.
 
-// Estado para controlar el tamaño de los gráficos
-let graphSizes = {}; // {graphId: size} donde size puede ser 1, 2, o 3 (columnas)
-let labelsOn = {}; 
-const selectedGraphs = new Set(); 
+console.log("📊 GraphsPage unificado — inicia");
 
+// ======== Estado global ========
+let graphSizes = {}; // { [graphId]: 1|2|3 }
+let originalGraphsData = []; // respuesta de /api/pinned-graphs
+let graphPositions = []; // orden actual de los gráficos
+const selectedGraphs = new Set(); // gráficos elegidos para el PPT
 
-const renderGraphsNew = async () => {
+// ======== Tema ========
+function readTheme() {
+    // 1) localStorage (preferente)
+    try {
+        const v = localStorage.getItem("vite-ui-theme");
+        if (v === "dark" || v === "light") return v;
+    } catch {}
+    // 2) cookie (fallback) => vite-ui-theme=dark|light
+    try {
+        const m = document.cookie.match(/(?:^|; )vite-ui-theme=([^;]*)/);
+        if (m) {
+            const v = decodeURIComponent(m[1]);
+            if (v === "dark" || v === "light") return v;
+        }
+    } catch {}
+    // 3) media query (último recurso)
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+let THEME = readTheme();
+console.log("🎨 Tema detectado:", THEME);
+
+// Re-Render si el tema cambia (p. ej. otra pestaña cambia localStorage)
+window.addEventListener("storage", (e) => {
+    if (e.key === "vite-ui-theme") {
+        const newTheme = readTheme();
+        if (newTheme !== THEME) {
+            THEME = newTheme;
+            console.log("🎨 Tema cambió → re-render:", THEME);
+            // Re-render completo para que cambien íconos/estilos/plotly
+            renderGraphsUnified();
+        }
+    }
+});
+
+// ======== Utilidades de íconos por tema ========
+// En el repo existen variantes para LIGHT con sufijos "-light" (y algunos "-ligth").
+// Para mantener compatibilidad, hacemos un mapeo por icono lógico.
+function asset(icon) {
+    const light = THEME === "light";
+    const map = {
+        presentation: light ? "public/presentation-light.svg" : "public/presentation.svg",
+        calendar: light ? "public/calendar-black.svg" : "public/calendar.svg",
+        grip: light ? "public/grip-ligth.svg" : "public/grip.svg", // nota: archivo existente con "ligth"
+        zoomOut: light ? "public/zoom-out-ligth.svg" : "public/zoom-out.svg",
+        zoomMid: light ? "public/search-ligth.svg" : "public/search.svg",
+        zoomIn: light ? "public/zoom-in-ligth.svg" : "public/zoom-in.svg",
+        trash: light ? "public/trash-light.svg" : "public/trash.svg",
+        clipPlus: light ? "public/clipboard-plus-light.svg" : "public/clipboard-plus.svg",
+        clipCheck: "public/clipboard-check.svg",
+        download: "public/download.svg",
+    };
+    return map[icon];
+}
+
+// ======== Patch global de Plotly según tema ========
+(function patchPlotly() {
+    if (window.__plotlyPatched) return; // patch una vez; decide por THEME en cada invocación
+    const originalNewPlot = Plotly.newPlot;
+
+    const LIGHT_LAYOUT = {
+        template: "plotly_white",
+        paper_bgcolor: "rgba(255,255,255,1)",
+        plot_bgcolor: "rgba(255,255,255,1)",
+        font: { color: "#111827" },
+        colorway: ["#2563eb", "#16a34a", "#db2777", "#d97706", "#7c3aed", "#dc2626", "#0891b2", "#ca8a04"],
+        xaxis: {
+            gridcolor: "#e5e7eb",
+            zerolinecolor: "#e5e7eb",
+            linecolor: "#9ca3af",
+            tickfont: { color: "#374151" },
+            titlefont: { color: "#111827" },
+        },
+        yaxis: {
+            gridcolor: "#e5e7eb",
+            zerolinecolor: "#e5e7eb",
+            linecolor: "#9ca3af",
+            tickfont: { color: "#374151" },
+            titlefont: { color: "#111827" },
+        },
+        legend: { font: { color: "#111827" } },
+    };
+
+    const DARK_LAYOUT = {
+        template: "plotly_dark",
+        paper_bgcolor: "rgba(0,0,0,0)",
+        plot_bgcolor: "rgba(0,0,0,0)",
+        font: { color: "#e5e7eb" },
+        colorway: ["#60a5fa", "#34d399", "#f472b6", "#f59e0b", "#a78bfa", "#f87171", "#22d3ee", "#fde047"],
+        xaxis: {
+            gridcolor: "#2f2f2f",
+            zerolinecolor: "#2f2f2f",
+            linecolor: "#444",
+            tickfont: { color: "#cbd5e1" },
+            titlefont: { color: "#9ca3af" },
+        },
+        yaxis: {
+            gridcolor: "#2f2f2f",
+            zerolinecolor: "#2f2f2f",
+            linecolor: "#444",
+            tickfont: { color: "#cbd5e1" },
+            titlefont: { color: "#9ca3af" },
+        },
+        legend: { font: { color: "#e5e7eb" } },
+    };
+
+    const DEFAULT_CONFIG = { responsive: true, displaylogo: false, locale: "es" };
+
+    function mergeDeep(target, source) {
+        const t = target || {};
+        for (const k in source) {
+            const v = source[k];
+            if (v && typeof v === "object" && !Array.isArray(v)) t[k] = mergeDeep(t[k] || {}, v);
+            else if (v !== undefined) t[k] = v;
+        }
+        return t;
+    }
+
+    function tweakTraceForTheme(trace) {
+        const t = { ...trace };
+        if (t.type === "pie" || t.type === "treemap" || t.type === "sunburst") {
+            if (THEME === "dark") {
+                t.textfont = { color: "#e5e7eb", ...(t.textfont || {}) };
+                t.insidetextfont = { color: "#ffffff", ...(t.insidetextfont || {}) };
+                t.outsidetextfont = { color: "#e5e7eb", ...(t.outsidetextfont || {}) };
+            } else {
+                t.textfont = { color: "#111827", ...(t.textfont || {}) };
+                t.insidetextfont = { color: "#111827", ...(t.insidetextfont || {}) };
+                t.outsidetextfont = { color: "#111827", ...(t.outsidetextfont || {}) };
+            }
+        }
+        return t;
+    }
+
+    Plotly.newPlot = function (container, data, layout = {}, config = {}) {
+        // Permite saltar el tema si layout.__skipTheme === true
+        if (!(layout && layout.__skipTheme)) {
+            layout = mergeDeep(mergeDeep({}, THEME === "dark" ? DARK_LAYOUT : LIGHT_LAYOUT), layout || {});
+        }
+        const dataPatched = (data || []).map(tweakTraceForTheme);
+        const configPatched = { ...DEFAULT_CONFIG, ...(config || {}) };
+        return originalNewPlot(container, dataPatched, layout, configPatched);
+    };
+
+    window.__plotlyPatched = true;
+})();
+
+function redirectToLoginPreservandoDestino() {
+    const destino = encodeURIComponent(location.pathname || "/graphs");
+    location.href = `/login?next=${destino}`;
+}
+
+// ======== Render principal ========
+async function renderGraphsUnified() {
     const root = document.getElementById("root");
+    const isLight = THEME === "light";
 
-    // Diseño QAgent
     root.innerHTML = `
-    <div style="background: #212121; min-height: 100vh; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-      
-      <!-- Header elegante -->
-      <header style="background:#212121; border-bottom: 1px #fff; padding: 20px 0;  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);">
-      <div style="max-width: 1400px; margin: 0 auto; padding: 0 24px; display: flex; align-items: center; justify-content: space-between;">
-      <div style="display: flex; align-items: center; gap: 16px;">
-            
-            <!-- Imagen al lado izquierdo -->
-            <img src="public/avatar.png" alt="Avatar" style="height: 32px; width: 32px; border-radius: 50%;" />
+    <div style="background:${
+        isLight ? "#ffffff" : "#212121"
+    }; min-height:100vh; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; ${
+        isLight ? "color:#111827" : ""
+    }">
+      <header style="background:${isLight ? "#ffffff" : "#212121"}; border-bottom:1px solid ${
+        isLight ? "#e5e7eb" : "#3c3c3c"
+    }; padding:20px 0; box-shadow:${isLight ? "0 4px 8px rgba(0,0,0,0.03)" : "0 4px 8px rgba(0,0,0,0.3)"};">
+        <div style="max-width:1400px; margin:0 auto; padding:0 24px; display:flex; align-items:center; justify-content:space-between;">
+          <div style="display:flex; align-items:center; gap:16px;">
+            <img src="public/avatar.png" alt="Avatar" style="height:32px; width:32px; border-radius:50%;"/>
+            <h1 style="margin:0; font-size:24px; font-weight:600; color:${
+                isLight ? "#111827" : "#ffffff"
+            };">Mis Gráficos</h1>
+          </div>
+          <div style="display:flex; align-items:center; gap:12px;">
+            <span id="graphs-count" style="font-size:14px; color:${isLight ? "#374151" : "#ffffff"};">Cargando...</span>
 
-            <h1 style="margin: 0; font-size: 24px; font-weight: 600; color: #fff;">Mis Gráficos</h1>
-      </div>
-      
-      <div style="display: flex; align-items: center; gap: 12px;">
-            <span style="font-size: 14px; color: #fff;" id="graphs-count">Cargando...</span>
-            <img 
-            src="public/presentation.svg" 
-            width="22" 
-            height="22" 
-            style="cursor: pointer; margin-left: 12px;" 
-            title="Generar reporte PowerPoint"
-            onclick="handleDownloadSelectedGraphs()" 
-            />
-      </div>
+            <button
+                onclick="handleDownloadSelectedGraphs()"
+                title="Generar reporte PowerPoint"
+                style="
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                background: transparent;
+                border: 1px solid ${isLight ? "rgba(0,0,0,0.15)" : "rgba(255,255,255,0.3)"};
+                color: ${isLight ? "#374151" : "#ffffff"};
+                font-size: 14px;
+                padding: 6px 10px;
+                border-radius: 8px;
+                cursor: pointer;
+                transition: background 0.2s, border-color 0.2s;
+                "
+                onmouseover="this.style.background='${isLight ? "rgba(0,0,0,0.05)" : "rgba(255,255,255,0.1)"}'"
+                onmouseout="this.style.background='transparent'"
+            >
+                <img 
+                src="${asset("presentation")}" 
+                width="20" 
+                height="20" 
+                alt="PowerPoint icon"
+                />
+                <span>Generar PowerPoint</span>
+            </button>
+            </div>
 
-
-      </div>
+        </div>
       </header>
-
-
-      <!-- Contenido principal -->
-      <main style="max-width: 1900px; margin: 0 auto; padding: 32px 24px;">
+      <main style="max-width:1900px; margin:0 auto; padding:32px 24px;">
         <div id="graphs-container-new">
-          <!-- Loading state -->
-          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 400px;">
-            <div style="width: 32px; height: 32px; border: 2px solid #e5e7eb; border-top: 2px solid #3b82f6; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 16px;"></div>
-            <p style="color: #6b7280; font-size: 16px; margin: 0;">Cargando gráficos...</p>
+          <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:400px;">
+            <div style="width:32px; height:32px; border:2px solid #e5e7eb; border-top:2px solid ${
+                isLight ? "#2563eb" : "#3b82f6"
+            }; border-radius:50%; animation:spin 1s linear infinite; margin-bottom:16px;"></div>
+            <p style="color:${isLight ? "#6b7280" : "#9ca3af"}; font-size:16px; margin:0;">Cargando gráficos...</p>
           </div>
         </div>
       </main>
     </div>
-    
     <style>
-      @keyframes spin {
-        from { transform: rotate(0deg); }
-        to { transform: rotate(360deg); }
-      }
-
-     
-      
-      .graph-card {
-        background: #171717;
-        border-radius: 10px;
-        border: 1px solid #161a1d;
-        overflow: hidden;
-        transition: all 0.3s ease;
-        box-shadow: 0 1px 3px rgba(222, 222, 222, 0.1);
-      }
-      
-      .graph-card:hover {
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-        border-color:rgb(60, 60, 61);
-      }
-      
-      .size-controls {
-        display: flex;
-        gap: 4px;
-        opacity: 1;
-        transition: opacity 0.2s;
-      }
-      
-      .graph-card:hover .size-controls {
-        opacity: 1;
-      }
-      
-      .size-btn {
-        width: 28px;
-        height: 28px;
-        border: 1px solid #d1d5db;
-        background: white;
-        border-radius: 6px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: all 0.2s;
-        font-size: 12px;
-        color: #6b7280;
-      }
-      
-      .size-btn:hover {
-        background: #f3f4f6;
-        border-color: #9ca3af;
-      }
-      
-      .size-btn.active {
-        background: #3b82f6;
-        border-color: #3b82f6;
-        color: white;
-      }
-      
-      .position-btn {
-        width: 28px;
-        height: 28px;
-        border: 1px solid #d1d5db;
-        background: white;
-        border-radius: 6px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: all 0.2s;
-        color: #6b7280;
-      }
-      
-      .position-btn:hover:not(:disabled) {
-        background: #f3f4f6;
-        border-color: #9ca3af;
-        color: #374151;
-      }
-      
-      .position-btn:disabled {
-        opacity: 0.4;
-        cursor: not-allowed;
-        background: #f9fafb;
-      }
-      
-      .graph-grid {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 24px;
-      }
-      
-      .graph-item-1 { grid-column: span 1; }
-      .graph-item-2 { grid-column: span 2; }
-      .graph-item-3 { grid-column: span 3; }
-      
-      @media (max-width: 1024px) {
-        .graph-grid {
-          grid-template-columns: repeat(2, 1fr);
-        }
-        .graph-item-2, .graph-item-3 { grid-column: span 2; }
-      }
-      
-      @media (max-width: 640px) {
-        .graph-grid {
-          grid-template-columns: 1fr;
-        }
-        .graph-item-1, .graph-item-2, .graph-item-3 { grid-column: span 1; }
-      }
-      
-      /* Estilos adicionales para ajuste perfecto de Plotly */
-      .graph-card [id^="graph-new-"] .js-plotly-plot,
-      .graph-card [id^="graph-new-"] .plotly {
-        border-radius: 8px !important;
-      }
-      
-      .graph-card [id^="graph-new-"] .svg-container {
-        border-radius: 8px !important;
-        overflow: visible !important;
-      }
-      
-      .graph-card [id^="graph-new-"] .main-svg {
-        border-radius: 8px !important;
-      }
-      
-      /* Estilos para el modebar */
-      .graph-card .modebar {
-        position: absolute !important;
-        top: 8px !important;
-        right: 8px !important;
-        z-index: 10 !important;
-      }
-
-      
-      .graph-card [id^="graph-new-"] .main-svg {
-          border-radius: 2px !important;
-      }
-      .js-plotly-plot {
-            background: transparent !important;
-       }
-
-      .modebar-btn--logo{
-            display:none !important;
-      }
-
-      .fade-out-up {
-            opacity: 0;
-            transform: translateY(-12px);
-            transition: opacity 0.5s ease, transform 0.5s ease;
-      }
-
-      .drag-handle {
-            cursor: grab;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            opacity: 0.6;
-            transition: opacity 0.2s;
-      }
-
-      .drag-handle:hover {
-            opacity: 1;
-      }
-
-      .drag-handle:active {
-            cursor: grabbing;
-      }
-
-      .drag-handle {
-  cursor: grab;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0.6;
-  transition: opacity 0.2s;
-}
-
-.drag-handle:hover {
-  opacity: 1;
-}
-
-.drag-handle:active {
-  cursor: grabbing;
-}
-
-
-.graph-card:hover {
-    
-    box-shadow: 0 0 30px rgba(255, 0, 89, 0.2); /* efecto glow */
-    transition: opacity 0.5s ease;
-}
-
-
-        
+      @keyframes spin { from{transform:rotate(0)} to{transform:rotate(360deg)} }
+      .graph-card{ background:${isLight ? "#ffffff" : "#171717"}; border-radius:10px; border:1px solid ${
+        isLight ? "#e5e7eb" : "#161a1d"
+    }; overflow:hidden; transition:all .3s ease; box-shadow:${
+        isLight ? "0 1px 3px rgba(0,0,0,.06)" : "0 1px 3px rgba(222,222,222,.1)"
+    }; }
+      .graph-card:hover{ box-shadow:${
+          isLight ? "0 4px 16px rgba(0,0,0,.08)" : "0 4px 12px rgba(0,0,0,.1)"
+      }; border-color:${isLight ? "#e5e7eb" : "rgb(60,60,61)"}; }
+      .graph-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:24px; }
+      .graph-item-1{grid-column:span 1}.graph-item-2{grid-column:span 2}.graph-item-3{grid-column:span 3}
+      @media (max-width:1024px){ .graph-grid{grid-template-columns:repeat(2,1fr)} .graph-item-2,.graph-item-3{grid-column:span 2} }
+      @media (max-width:640px){ .graph-grid{grid-template-columns:1fr} .graph-item-1,.graph-item-2,.graph-item-3{grid-column:span 1} }
+      .graph-card [id^="graph-new-"] .js-plotly-plot,.graph-card [id^="graph-new-"] .plotly{border-radius:8px!important}
+      .graph-card [id^="graph-new-"] .svg-container{border-radius:8px!important; overflow:visible!important}
+      .graph-card [id^="graph-new-"] .main-svg{border-radius:8px!important}
+      .graph-card .modebar{position:absolute!important; top:8px!important; right:8px!important; z-index:10!important}
+      .js-plotly-plot{background:transparent!important}
+      .modebar-btn--logo{display:none!important}
+      .fade-out-up{opacity:0; transform:translateY(-12px); transition:opacity .5s ease, transform .5s ease}
+      .drag-handle{cursor:grab; display:flex; align-items:center; justify-content:center; opacity:.6; transition:opacity .2s}
+      .drag-handle:hover{opacity:1} .drag-handle:active{cursor:grabbing}
     </style>
   `;
 
     try {
-        console.log("🔄 Cargando gráficos...");
         const response = await fetch("/api/pinned-graphs", {
             credentials: "include",
             headers: { Accept: "application/json" },
         });
-
         if (!response.ok) {
-            const data = await response.json();
-
-            if (response.statusText === "Unauthorized") {
-                // Redirigir a la página de inicio de sesión si no está autenticado
-                window.location.href = "/login";
+            // usar status, no statusText, y tolerar respuestas no-JSON
+            if (response.status === 401) {
+                redirectToLoginPreservandoDestino();
                 return;
             }
-
-            showErrorNew("Error: " + (data.error || "Error desconocido"));
+            let data = {};
+            const ct = (response.headers.get("content-type") || "").toLowerCase();
+            if (ct.includes("application/json")) {
+                data = await response.json();
+            } else {
+                const raw = await response.text();
+                try {
+                    data = JSON.parse(raw);
+                } catch {
+                    data = { error: raw.slice(0, 400) + (raw.length > 400 ? "…" : "") };
+                }
+            }
+            showErrorUnified("Error: " + (data.error || "Error desconocido"));
             return;
         }
 
         const data = await response.json();
+        originalGraphsData = data.graphs || [];
+
         const container = document.getElementById("graphs-container-new");
         const countElement = document.getElementById("graphs-count");
+        countElement.textContent = `${originalGraphsData.length} gráficos`;
 
-        // Actualizar contador
-        countElement.textContent = `${data.graphs?.length || 0} gráficos`;
-
-        if (!data.graphs || data.graphs.length === 0) {
+        if (originalGraphsData.length === 0) {
             container.innerHTML = `
-       <div style="display: flex; justify-content: center; align-items: center;height: 70vh;">
-        <div style="max-width: 860px; text-align: center; padding: 80px 20px; background: #212121; border-radius: 12px; border: 1px solid #e5e7eb;">
-          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" stroke-width="1" style="margin: 0 auto 24px;">
-            <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
-          </svg>
-          <h3 style="margin: 0 0 8px; font-size: 20px; font-weight: 600; color:rgb(255, 255, 255);">No hay gráficos fijados</h3>
-          <p style="margin: 0; color:rgb(255, 255, 255); font-size: 16px;">Fija algunos gráficos desde el chat para verlos aquí</p>
-        </div>
-        </div>
-        
-      `;
+        <div style="display:flex; justify-content:center; align-items:center; height:70vh;">
+          <div style="max-width:860px; text-align:center; padding:80px 20px; background:${
+              isLight ? "#ffffff" : "#212121"
+          }; border-radius:12px; border:1px solid ${isLight ? "#e5e7eb" : "#3c3c3c"};">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="${
+                isLight ? "#9ca3af" : "#d1d5db"
+            }" stroke-width="1" style="margin:0 auto 24px;"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+            <h3 style="margin:0 0 8px; font-size:20px; font-weight:600; color:${
+                isLight ? "#111827" : "#ffffff"
+            };">No hay gráficos fijados</h3>
+            <p style="margin:0; color:${
+                isLight ? "#6b7280" : "#ffffff"
+            }; font-size:16px;">Fija algunos gráficos desde el chat para verlos aquí</p>
+          </div>
+        </div>`;
             return;
         }
 
-        // Almacenar datos originales
-        originalGraphsData = data.graphs;
-
-        // Cargar configuración guardada
+        // Cargar config previa (orden/tamaños)
         const configLoaded = loadGraphConfiguration();
-
-        // Inicializar posiciones si es la primera vez o sincronizar con datos actuales
         if (!configLoaded || graphPositions.length === 0) {
-            graphPositions = data.graphs.map((graph) => graph.id);
-            console.log("🆕 Inicializando posiciones por primera vez");
+            graphPositions = originalGraphsData.map((g) => g.id);
         } else {
-            // Sincronizar posiciones con gráficos actuales
-            const currentIds = data.graphs.map((g) => g.id);
-
-            // Filtrar posiciones que ya no existen
+            // sincronizar posiciones con ids actuales
+            const currentIds = originalGraphsData.map((g) => g.id);
             graphPositions = graphPositions.filter((id) => currentIds.includes(id));
-
-            // Agregar nuevos gráficos al final
             currentIds.forEach((id) => {
-                if (!graphPositions.includes(id)) {
-                    graphPositions.push(id);
-                    console.log(`➕ Nuevo gráfico agregado: ${id}`);
-                }
+                if (!graphPositions.includes(id)) graphPositions.push(id);
             });
-
-            console.log("🔄 Posiciones sincronizadas");
         }
-
-        // Inicializar tamaños por defecto para nuevos gráficos
-        data.graphs.forEach((graph) => {
-            if (!graphSizes[graph.id]) {
-                graphSizes[graph.id] = 1; // Tamaño por defecto: 1 columna
-            }
+        originalGraphsData.forEach((g) => {
+            if (!graphSizes[g.id]) graphSizes[g.id] = 1;
         });
 
-        console.log("📊 Estado final - Posiciones:", graphPositions);
-        console.log("📏 Estado final - Tamaños:", graphSizes);
-
-        // Renderizar gráficos en el orden guardado/configurado
-        renderGraphsInOrder();
-    } catch (error) {
-        console.error("💥 Error:", error);
-        showErrorNew("Error: " + error.message);
+        renderGraphsInOrderUnified();
+    } catch (err) {
+        console.error("💥 Error:", err);
+        showErrorUnified("Error: " + err.message);
     }
-};
+}
 
-// Función para renderizar gráficos en el orden correcto
-const renderGraphsInOrder = () => {
+function renderGraphsInOrderUnified() {
+    const isLight = THEME === "light";
     const container = document.getElementById("graphs-container-new");
 
-    // Renderizar grid de gráficos en el orden de las posiciones
     container.innerHTML = `
-      <div class="graph-grid" id="graph-grid">
+    <div class="graph-grid" id="graph-grid">
       ${graphPositions
           .map((graphId) => {
               const graph = originalGraphsData.find((g) => g.id === graphId);
               if (!graph) return "";
-
               const size = graphSizes[graph.id] || 1;
 
-              // Manejar la fecha de forma segura
-              let dateString = "Fecha no disponible";
-
-              if (graph.created_at) {
-                  try {
-                      const date = new Date(graph.created_at);
-                      if (!isNaN(date.getTime())) {
-                          dateString = date.toLocaleDateString("es-ES", {
-                              day: "2-digit",
-                              month: "2-digit",
-                              year: "numeric",
-                          });
-                      }
-                  } catch (e) {
-                      console.warn("Error parsing date:", graph.created_at);
-                  }
-              }
+              // Fecha: usar la que viene (ya viene formateada por backend para created_at)
+              let dateString = "";
+              if (graph.display_date) dateString = graph.display_date;
+              else if (graph.created_at) dateString = graph.created_at;
 
               return `
-          <div class="graph-card graph-item-${size}" data-graph-id="${graph.id}">
-            <!-- Header del gráfico -->
-            <div style="padding: 20px 24px 16px; border-bottom: 1px solid #3c3c3c; display: flex; justify-content: space-between; align-items: flex-start;">
-              <div style="flex: 1;">
-                <h3 class="graph-title"
-                  style="margin: 0 0 4px; font-size: 18px; font-weight: 600; color: #6b7280; line-height: 1.4; cursor: text;"
-                  data-graph-id="${graph.id}"
-                  ondblclick="enableTitleEdit(this)">
-                  ${graph.pin_title ? graph.pin_title : graph.figure?.layout?.title?.text || "Gráfico sin título"}
-                  </h3>
+            <div class="graph-card graph-item-${size}" data-graph-id="${graph.id}">
+                <div style="padding:20px 24px 16px; border-bottom:1px solid ${isLight ? "#f3f4f6" : "#3c3c3c"};">
+                    <!-- Fila 1: fecha + botones -->
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+                    <!-- Columna izquierda: FECHA -->
+                    <p style="margin:0; font-size:14px; color:${
+                        isLight ? "#6b7280" : "#6b7280"
+                    }; display:flex; align-items:center; gap:6px;">
+                        <img src="${asset("calendar")}" width="14" height="14" alt="Calendario" style="opacity:0.7;"/>
+                        ${dateString || ""}
+                    </p>
 
-                <p style="margin: 0; font-size: 14px; color: #6b7280; display: flex; align-items: center; gap: 6px;">
-                  <img src="public/calendar.svg" width="14" height="14" alt="Calendario" style="opacity: 0.7;" />
-                  ${dateString}
-                  </p>
-              </div>
-              
-              <!-- Controles de posición y tamaño -->
-              <div style="display: flex; gap: 12px; align-items: center;">
-                <!-- Controles de posición -->
-                <div style="display: flex; gap: 12px; align-items: center;">  
-                <div class="drag-handle" title="Arrastrar para cambiar de lugar">
-                        <img src="public/grip.svg" width="20" height="20" style="opacity: 0.6; transition: opacity 0.2s;" />
-                  </div>
-                  </div>
+                    <!-- Columna derecha: BOTONES -->
+                    <div style="display:flex; gap:12px; align-items:center;">
+                        <div class="drag-handle" title="Arrastrar para cambiar de lugar">
+                        <img src="${asset("grip")}" width="20" height="20" style="opacity:.6; transition:opacity .2s;"/>
+                        </div>
+                        <div style="width:1px; height:20px; background:${isLight ? "#e5e7eb" : "#e5e7eb"};"></div>
+                        <div class="size-controls" style="display:flex; gap:8px;">
+                        <img src="${asset(
+                            "zoomOut"
+                        )}" width="20" height="20" style="cursor:pointer;" title="Zoom pequeño" onclick="changeGraphSize('${
+                  graph.id
+              }', 1)"/>
+                        <img src="${asset(
+                            "zoomMid"
+                        )}" width="20" height="20" style="cursor:pointer;" title="Zoom medio" onclick="changeGraphSize('${
+                  graph.id
+              }', 2)"/>
+                        <img src="${asset(
+                            "zoomIn"
+                        )}" width="20" height="20" style="cursor:pointer;" title="Zoom grande" onclick="changeGraphSize('${
+                  graph.id
+              }', 3)"/>
+                        <div style="width:1px; height:20px; background:${isLight ? "#e5e7eb" : "#e5e7eb"};"></div>
+                        <img src="${asset(
+                            "clipPlus"
+                        )}" width="20" height="20" class="clipboard-toggle" data-graph-id="${
+                  graph.id
+              }" style="cursor:pointer;" title="Agregar al reporte" onclick="toggleGraphSelection(this)"/>
+                        </div>
+                        <div style="width:1px; height:20px; background:${isLight ? "#e5e7eb" : "#e5e7eb"};"></div>
+                        <div class="size-controls" style="display:flex; gap:8px;">
+                        <img src="${asset(
+                            "trash"
+                        )}" width="20" height="20" style="cursor:pointer;" title="Eliminar gráfico" onclick="deleteGraph('${
+                  graph.id
+              }', 1)"/>
+                        </div>
+                    </div>
+                    </div>
 
-                
-                <!-- Separador -->
-                <div style="width: 1px; height: 20px; background: #e5e7eb;"></div>
-                
-             <!-- Controles de tamaño -->
-              <div class="size-controls" style="display: flex; gap: 8px;">
-                <img src="public/zoom-out.svg" width="20" height="20"
-                    onclick="changeGraphSize('${graph.id}', 1)" 
-                    style="cursor: pointer; transition: opacity 0.2s;" 
-                    title="Zoom pequeño" />
+                    <!-- Fila 2: TÍTULO a todo el ancho -->
+                    <h3 class="graph-title" style="margin:10px 0 0; font-size:14px; font-weight:600; color:${
+                        isLight ? "#111827" : "#6b7280"
+                    }; line-height:1.4; cursor:text;" data-graph-id="${graph.id}" ondblclick="enableTitleEdit(this)">
+                    ${graph.pin_title ? graph.pin_title : graph.figure?.layout?.title?.text || "Gráfico sin título"}
+                    </h3>
+                </div>
 
-                <img src="public/search.svg" width="20" height="20"
-                    onclick="changeGraphSize('${graph.id}', 2)" 
-                    style="cursor: pointer;  transition: opacity 0.2s;" 
-                    title="Zoom medio" />
-
-                <img src="public/zoom-in.svg" width="20" height="20"
-                    onclick="changeGraphSize('${graph.id}', 3)" 
-                    style="cursor: pointer;  transition: opacity 0.2s;" 
-                    title="Zoom grande" />
-
-                    <div style="width: 1px; height: 20px; background: #e5e7eb;"></div>
-
-                    <img 
-                        src="${labelsOn[graph.id] ? 'public/tag-on.svg' : 'public/tag.svg'}"
-                        width="20" height="20"
-                        style="cursor: pointer; transition: opacity 0.2s;"
-                        title="${labelsOn[graph.id] ? 'Ocultar etiquetas' : 'Mostrar etiquetas'}"
-                        onclick="toggleLabels('${graph.id}')"
-                    />
-                    <div style="width: 1px; height: 20px; background: #e5e7eb;"></div>
-                    <img 
-                        src="public/clipboard-plus.svg" 
-                        width="20" 
-                        height="20" 
-                        style="cursor: pointer; transition: opacity 0.2s;" 
-                        title="Agregar al reporte"
-                        class="clipboard-toggle"
-                        data-graph-id="${graph.id}"
-                        onclick="toggleGraphSelection(this)"
-                        />
-              </div>
-
-              <div style="width: 1px; height: 20px; background: #e5e7eb;"></div>
-
-              <div class="size-controls" style="display: flex; gap: 8px;">        
-              
-            <img src="public/trash.svg" width="20" height="20"
-                onclick="deleteGraph('${graph.id}', 1)"  
-                style="cursor: pointer; transition: opacity 0.2s;" 
-                title="Eliminar gráfico" />
-               </div>        
-              
-
-
-              </div>
-            </div>
-            
-            <!-- Área del gráfico -->
-            <div style="padding: 16px; padding-top: 8px;">
-              <div id="graph-new-${graph.id}" style="width: 100%; height: ${getGraphHeight(
+                <!-- Área del gráfico -->
+                <div style="padding:16px; padding-top:8px;">
+                    <div id="graph-new-${graph.id}" style="width:100%; height:${getGraphHeight(
                   size
-              )}px; border-radius: 8px; background: #fafafa; position: relative;"></div>
-            </div>
-          </div>
-        `;
+              )}px; border-radius:8px; background:${isLight ? "#fafafa" : "#0f0f0f"}; position:relative;"></div>
+                </div>
+                </div>
+              `;
           })
           .join("")}
-    </div>
-  `;
+    </div>`;
 
-    // Renderizar gráficos con Plotly en el orden de las posiciones
+    // Render Plotly
     graphPositions.forEach((graphId) => {
         const graph = originalGraphsData.find((g) => g.id === graphId);
-        if (graph && graph.figure) {
+        if (graph?.figure) {
             const size = graphSizes[graph.id] || 1;
-            renderPlotlyGraph(graph, size);
+            renderPlotlyGraphUnified(graph, size);
         }
     });
 
-    // Habilitar Dragula con grip como handle
+    // Drag & drop (dragula)
     const grid = document.getElementById("graph-grid");
     if (grid && typeof dragula !== "undefined") {
         dragula([grid], {
-            moves: (el, container, handle) => {
-                return handle.classList.contains("drag-handle") || handle.closest(".drag-handle");
-            },
+            moves: (el, _container, handle) =>
+                handle.classList.contains("drag-handle") || handle.closest(".drag-handle"),
         }).on("drop", () => {
             const cards = Array.from(grid.children);
             graphPositions = cards.map((card) => card.getAttribute("data-graph-id"));
-            console.log("🔀 Nuevo orden arrastrado:", graphPositions);
             saveGraphConfiguration();
         });
     }
-};
+}
 
-// Función para cambiar el tamaño de un gráfico
-window.changeGraphSize = (graphId, newSize) => {
-    graphSizes[graphId] = newSize;
+function getGraphHeight(size) {
+    return size === 3 ? 500 : size === 2 ? 400 : 300;
+}
 
-    // Actualizar la clase del contenedor
-    const graphCard = document.querySelector(`[data-graph-id="${graphId}"]`);
-    graphCard.className = `graph-card graph-item-${newSize}`;
-
-    // Actualizar botones activos
-    const buttons = graphCard.querySelectorAll(".size-btn");
-    buttons.forEach((btn, index) => {
-        btn.classList.toggle("active", index + 1 === newSize);
-    });
-
-    // Redimensionar el gráfico
-    const graphContainer = document.getElementById(`graph-new-${graphId}`);
-    const newHeight = getGraphHeight(newSize);
-    graphContainer.style.height = newHeight + "px";
-
-    // Re-renderizar el gráfico con nuevo tamaño
-    setTimeout(() => {
-        const graph = originalGraphsData.find((g) => g.id === graphId);
-        if (graph && graph.figure) {
-            renderPlotlyGraph(graph, newSize);
-        }
-
-        // Guardar configuración al cambiar tamaño
-        saveGraphConfiguration();
-    }, 100);
-};
-
-// Función para obtener la altura del gráfico según el tamaño
-const getGraphHeight = (size) => {
-    switch (size) {
-        case 1:
-            return 300;
-        case 2:
-            return 400;
-        case 3:
-            return 500;
-        default:
-            return 300;
-    }
-};
-
-// Función para renderizar un gráfico con Plotly
-const renderPlotlyGraph = (graph, size) => {
-    const height = getGraphHeight(size);
+function renderPlotlyGraphUnified(graph, size) {
     const containerId = `graph-new-${graph.id}`;
     const container = document.getElementById(containerId);
-
     if (!container) return;
 
-    // Obtener las dimensiones exactas del contenedor
     const containerWidth = container.clientWidth;
     const containerHeight = container.clientHeight;
 
-    // Configuración mejorada de márgenes con espacio para modebar
     let margins;
     switch (size) {
-        case 1:
-            // Más espacio en la parte superior y derecha para el modebar
-            margins = { t: 40, r: 50, b: 35, l: 45 };
+        case 3:
+            margins = { t: 60, r: 70, b: 55, l: 65 };
             break;
         case 2:
             margins = { t: 50, r: 60, b: 45, l: 55 };
             break;
-        case 3:
-            margins = { t: 60, r: 70, b: 55, l: 65 };
-            break;
         default:
             margins = { t: 40, r: 50, b: 35, l: 45 };
     }
 
+    const layout = { ...(graph.figure?.layout || {}), margin: { ...(graph.figure?.layout?.margin || {}), ...margins } };
+    Plotly.newPlot(containerId, graph.figure.data, layout);
 
-// === Defaults Dark para TODOS los gráficos ===
-const QAGENT_DARK_LAYOUT = {
-  template: 'plotly_dark',
-  paper_bgcolor: 'rgba(0,0,0,0)',
-  plot_bgcolor: 'rgba(0,0,0,0)',
-  font: { color: '#e5e7eb' },
-  colorway: ['#60a5fa','#34d399','#f472b6','#f59e0b','#a78bfa','#f87171','#22d3ee','#fde047'],
-  xaxis: {
-    gridcolor: '#2f2f2f', zerolinecolor: '#2f2f2f', linecolor: '#444',
-    tickfont: { color: '#cbd5e1' }, titlefont: { color: '#9ca3af' }
-  },
-  yaxis: {
-    gridcolor: '#2f2f2f', zerolinecolor: '#2f2f2f', linecolor: '#444',
-    tickfont: { color: '#cbd5e1' }, titlefont: { color: '#9ca3af' }
-  },
-  legend: { font: { color: '#e5e7eb' } }
-};
-
-const QAGENT_DEFAULT_CONFIG = {
-  responsive: true,
-  displaylogo: false,
-  locale: 'es'
-};
-
-// Merge profundo simple
-function mergeDeep(target, source){
-  const t = target || {};
-  for (const k in source){
-    const v = source[k];
-    if (v && typeof v === 'object' && !Array.isArray(v)){
-      t[k] = mergeDeep(t[k] || {}, v);
-    } else if (v !== undefined){
-      t[k] = v;
-    }
-  }
-  return t;
-}
-
-// Ajustes por tipo (para que etiquetas en tortas/treemap se lean en dark)
-function tweakTrace(trace){
-  const t = { ...trace };
-  if (t.type === 'pie' || t.type === 'treemap' || t.type === 'sunburst'){
-    t.textfont = { color: '#e5e7eb', ...(t.textfont||{}) };
-    t.insidetextfont = { color: '#ffffff', ...(t.insidetextfont||{}) };
-    t.outsidetextfont = { color: '#e5e7eb', ...(t.outsidetextfont||{}) };
-  }
-  return t;
-}
-
-
-// Quita "+text" del mode sin romper otras combinaciones
-function removeTextFromMode(mode) {
-  if (!mode) return mode;
-  return mode
-    .replace('lines+markers+text', 'lines+markers')
-    .replace('markers+text', 'markers')
-    .replace('lines+text', 'lines')
-    .replace('+text', '')
-    .replace('text', 'lines+markers'); // fallback razonable
-}
-
-// Clona data y aplica etiquetas si enabled=true
-function withLabels(data, enabled) {
-  return (data || []).map(src => {
-    const t = { ...src };
-
-    if (!enabled) {
-      // Apaga etiquetas en bar/scatter
-      if (t.type === 'bar') {
-        delete t.text;
-        delete t.textposition;
-      }
-      if (t.type === 'scatter') {
-        t.mode = removeTextFromMode(t.mode);
-        delete t.text;
-        delete t.textposition;
-      }
-      // Si quieres que el toggle afecte también pies/sunburst/treemap, descomenta:
-       if (t.type === 'pie' || t.type === 'treemap' || t.type === 'sunburst') {
-         t.textinfo = t.textinfo && t.textinfo.replace('text','').replace('label+percent+value','none');
-       }
-      return t;
-    }
-
-    // Encendido: agrega etiquetas
-    if (t.type === 'bar') {
-      // usa Y como texto por defecto
-      t.text = t.text ?? t.y;
-      t.textposition = t.textposition ?? 'auto';
-      t.textfont = { color: '#e5e7eb', ...(t.textfont || {}) };
-    }
-
-    if (t.type === 'scatter') {
-      // si hay puntos/linea, agrega texto
-      if (t.y) {
-        t.text = t.text ?? t.y;
-        t.mode = t.mode ? (t.mode.includes('text') ? t.mode : `${t.mode}+text`) : 'lines+markers+text';
-        t.textposition = t.textposition ?? 'top center';
-        t.textfont = { color: '#e5e7eb', ...(t.textfont || {}) };
-      }
-    }
-
-    return t;
-  });
-}
-
-
-// --- PARCHE GLOBAL ---
-// Aplica dark layout, paleta y config por defecto a TODOS los newPlot,
-// sin importar qué venga en tu JSON ni el tipo de gráfico.
-(function patchPlotlyNewPlot(){
-  const original = Plotly.newPlot;
-  Plotly.newPlot = function(container, data, layout={}, config={}){
-    // Permite saltar el tema si algún caso quiere controlar todo:
-    if (!(layout && layout.__skipDark)){
-      layout = mergeDeep(mergeDeep({}, QAGENT_DARK_LAYOUT), layout || {});
-    }
-    const dataPatched = (data || []).map(tweakTrace);
-    const configPatched = { ...QAGENT_DEFAULT_CONFIG, ...(config||{}) };
-    return original(container, dataPatched, layout, configPatched);
-  };
-})();
-
-
-
-    const dataPatched = withLabels(graph.figure.data, !!labelsOn[graph.id]);
-    Plotly.newPlot(containerId, dataPatched);
-
-    // Ajuste adicional para asegurar que se mantiene dentro del contenedor
     setTimeout(() => {
         const graphDiv = document.getElementById(containerId);
         if (graphDiv && graphDiv._fullLayout) {
-            // Forzar el redimensionamiento exacto al contenedor
-            Plotly.relayout(graphDiv, {
-                width: containerWidth,
-                height: containerHeight,
-            });
+            Plotly.relayout(graphDiv, { width: containerWidth, height: containerHeight });
         }
     }, 150);
+}
+
+// ======== Acciones UI ========
+window.changeGraphSize = (graphId, newSize) => {
+    graphSizes[graphId] = newSize;
+    const card = document.querySelector(`[data-graph-id="${graphId}"]`);
+    if (card) card.className = `graph-card graph-item-${newSize}`;
+    const graphContainer = document.getElementById(`graph-new-${graphId}`);
+    if (graphContainer) graphContainer.style.height = getGraphHeight(newSize) + "px";
+    setTimeout(() => {
+        const graph = originalGraphsData.find((g) => g.id === graphId);
+        if (graph?.figure) renderPlotlyGraphUnified(graph, newSize);
+        saveGraphConfiguration();
+    }, 100);
 };
 
-const showErrorNew = (message) => {
-    const container = document.getElementById("graphs-container-new");
-    if (container) {
-        container.innerHTML = `
-      <div style="text-align: center; padding: 80px 20px; background: white; border-radius: 12px; border: 1px solid #fee2e2;">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2" style="margin: 0 auto 16px;">
-          <circle cx="12" cy="12" r="10"/>
-          <path d="M15 9l-6 6"/>
-          <path d="M9 9l6 6"/>
-        </svg>
-        <h3 style="margin: 0 0 8px; font-size: 18px; font-weight: 600; color: #dc2626;">Error</h3>
-        <p style="margin: 0; color: #6b7280; font-size: 14px;">${message}</p>
-      </div>
-    `;
-    }
-};
-
-// Inicializar cuando el documento esté listo
-document.addEventListener("DOMContentLoaded", renderGraphsNew);
-
-console.log("✅ GraphsPage Profesional cargado -", new Date().toLocaleTimeString());
-
-// Función para mover un gráfico hacia arriba
 window.moveGraphUp = (graphId) => {
-    const currentIndex = graphPositions.indexOf(graphId);
-
-    if (currentIndex > 0) {
-        // Intercambiar posiciones
-        [graphPositions[currentIndex], graphPositions[currentIndex - 1]] = [
-            graphPositions[currentIndex - 1],
-            graphPositions[currentIndex],
-        ];
-
-        console.log(`📈 Movido gráfico ${graphId} hacia arriba`);
-        console.log("📊 Nueva posición:", graphPositions);
-
-        // Re-renderizar los gráficos en el nuevo orden
-        renderGraphsInOrder();
-
-        // Guardar configuración
+    const idx = graphPositions.indexOf(graphId);
+    if (idx > 0) {
+        [graphPositions[idx - 1], graphPositions[idx]] = [graphPositions[idx], graphPositions[idx - 1]];
+        renderGraphsInOrderUnified();
         saveGraphConfiguration();
     }
 };
 
-// Función para mover un gráfico hacia abajo
 window.moveGraphDown = (graphId) => {
-    const currentIndex = graphPositions.indexOf(graphId);
-
-    if (currentIndex < graphPositions.length - 1) {
-        // Intercambiar posiciones
-        [graphPositions[currentIndex], graphPositions[currentIndex + 1]] = [
-            graphPositions[currentIndex + 1],
-            graphPositions[currentIndex],
-        ];
-
-        console.log(`📉 Movido gráfico ${graphId} hacia abajo`);
-        console.log("📊 Nueva posición:", graphPositions);
-
-        // Re-renderizar los gráficos en el nuevo orden
-        renderGraphsInOrder();
-
-        // Guardar configuración
+    const idx = graphPositions.indexOf(graphId);
+    if (idx >= 0 && idx < graphPositions.length - 1) {
+        [graphPositions[idx + 1], graphPositions[idx]] = [graphPositions[idx], graphPositions[idx + 1]];
+        renderGraphsInOrderUnified();
         saveGraphConfiguration();
     }
 };
 
-// Función para guardar configuración en localStorage
-const saveGraphConfiguration = () => {
+// ======== Persistencia de layout ========
+function saveGraphConfiguration() {
     try {
-        const config = {
-            positions: graphPositions,
-            sizes: graphSizes,
-            timestamp: new Date().toISOString(),
-        };
-
-        localStorage.setItem("graphsConfiguration", JSON.stringify(config));
-        console.log("💾 Configuración guardada:", config);
-    } catch (error) {
-        console.error("❌ Error guardando configuración:", error);
+        const cfg = { positions: graphPositions, sizes: graphSizes, timestamp: new Date().toISOString() };
+        localStorage.setItem("graphsConfiguration", JSON.stringify(cfg));
+    } catch (e) {
+        console.error("❌ Error guardando configuración:", e);
     }
-};
+}
 
-// Función para cargar configuración desde localStorage
-const loadGraphConfiguration = () => {
+function loadGraphConfiguration() {
     try {
         const saved = localStorage.getItem("graphsConfiguration");
-        if (saved) {
-            const config = JSON.parse(saved);
-            console.log("📁 Configuración cargada:", config);
-
-            // Restaurar posiciones si existen
-            if (config.positions && Array.isArray(config.positions)) {
-                graphPositions = config.positions;
-            }
-
-            // Restaurar tamaños si existen
-            if (config.sizes && typeof config.sizes === "object") {
-                graphSizes = config.sizes;
-            }
-
-            return true;
-        }
-    } catch (error) {
-        console.error("❌ Error cargando configuración:", error);
+        if (!saved) return false;
+        const cfg = JSON.parse(saved);
+        if (cfg.positions && Array.isArray(cfg.positions)) graphPositions = cfg.positions;
+        if (cfg.sizes && typeof cfg.sizes === "object") graphSizes = cfg.sizes;
+        return true;
+    } catch (e) {
+        console.error("❌ Error cargando configuración:", e);
+        return false;
     }
+}
 
-    return false;
-};
-
-/**  Elimina  el gráfico */
+// ======== CRUD de gráficos ========
 window.deleteGraph = async (graphId, confirmFlag = 1) => {
+    const isLight = THEME === "light";
     if (confirmFlag) {
         const result = await Swal.fire({
             title: "¿Eliminar gráfico?",
@@ -829,85 +546,65 @@ window.deleteGraph = async (graphId, confirmFlag = 1) => {
             showCancelButton: true,
             confirmButtonText: "Sí, eliminar",
             cancelButtonText: "Cancelar",
-            background: "#1e1e1e",
-            color: "#fff",
-            confirmButtonColor: "#d33",
-            cancelButtonColor: "#3085d6",
+            background: isLight ? "#ffffff" : "#1e1e1e",
+            color: isLight ? "#111827" : "#ffffff",
+            confirmButtonColor: isLight ? "#dc2626" : "#d33",
+            cancelButtonColor: isLight ? "#6b7280" : "#3085d6",
         });
-
         if (!result.isConfirmed) return;
     }
-
     try {
         const res = await fetch("/api/delete-graph", {
             method: "POST",
             credentials: "include",
-            headers: {
-                "Content-Type": "application/json",
-                Accept: "application/json",
-            },
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
             body: JSON.stringify({ id: graphId }),
         });
-
         const data = await res.json();
-        console.log("🧹 Respuesta del backend:", data);
+        console.log("🧹 Respuesta backend:", data);
 
-        // Eliminar el gráfico del DOM directamente
-        const graphCard = document.querySelector(`[data-graph-id="${graphId}"]`);
-        if (graphCard) {
-            graphCard.classList.add("fade-out-up");
-            setTimeout(() => {
-                graphCard.remove();
-                console.log(`🧽 Gráfico ${graphId} eliminado del DOM`);
-            }, 500); // debe coincidir con la duración del CSS (0.3s)
+        const card = document.querySelector(`[data-graph-id="${graphId}"]`);
+        if (card) {
+            card.classList.add("fade-out-up");
+            setTimeout(() => card.remove(), 500);
         }
 
-        // Eliminar también del array de posiciones
-        const index = graphPositions.indexOf(graphId);
-        if (index !== -1) {
-            graphPositions.splice(index, 1);
+        const idx = graphPositions.indexOf(graphId);
+        if (idx !== -1) {
+            graphPositions.splice(idx, 1);
             saveGraphConfiguration();
         }
 
-        // Actualizar contador
-        const countElement = document.getElementById("graphs-count");
-        if (countElement) {
-            countElement.textContent = `${graphPositions.length} gráficos`;
-        }
-    } catch (error) {
-        console.error("❌ Error al eliminar gráfico:", error);
-        alert("Hubo un error al intentar eliminar el gráfico.");
+        const countEl = document.getElementById("graphs-count");
+        if (countEl) countEl.textContent = `${graphPositions.length} gráficos`;
+    } catch (e) {
+        await Swal.fire({
+            icon: "error",
+            title: "Error",
+            text: "Hubo un error al intentar eliminar el gráfico.",
+            background: isLight ? "#ffffff" : "#1e1e1e",
+            color: isLight ? "#111827" : "#ffffff",
+        });
     }
 };
 
-/**  Cambia el título de gráfico */
 window.enableTitleEdit = (h3) => {
+    const isLight = THEME === "light";
     const originalText = h3.textContent;
     const graphId = h3.dataset.graphId;
-
-    // Crear input y reemplazar el h3 por él
     const input = document.createElement("input");
     input.type = "text";
     input.value = originalText;
-    input.style = `
-        font-size: 18px;
-        font-weight: 600;
-        color: #6b7280;
-        width: 100%;
-        background: transparent;
-        border: none;
-        border-bottom: 1px solid #4b5563;
-        outline: none;
-    `;
-
+    input.style = `font-size:18px; font-weight:600; color:${
+        isLight ? "#111827" : "#6b7280"
+    }; width:100%; background:transparent; border:none; border-bottom:1px solid ${
+        isLight ? "#d1d5db" : "#4b5563"
+    }; outline:none;`;
     h3.replaceWith(input);
     input.focus();
 
-    // Al salir del input o presionar Enter, enviar actualización
     const save = async () => {
-        const newTitle = input.value.trim() || "Gráfico sin título";
-
-        // Crear nuevo h3
+        const newTitle = (input.value || "").trim() || "Gráfico sin título";
         const newH3 = document.createElement("h3");
         newH3.className = "graph-title";
         newH3.textContent = newTitle;
@@ -915,121 +612,70 @@ window.enableTitleEdit = (h3) => {
         newH3.setAttribute("style", h3.getAttribute("style"));
         newH3.setAttribute("ondblclick", "enableTitleEdit(this)");
         input.replaceWith(newH3);
-
-        // Llamar al backend
         try {
             const res = await fetch("/api/update-graph", {
                 method: "POST",
                 credentials: "include",
-                headers: {
-                    "Content-Type": "application/json",
-                    Accept: "application/json",
-                },
+                headers: { "Content-Type": "application/json", Accept: "application/json" },
                 body: JSON.stringify({ id: graphId, title: newTitle }),
             });
-
             const data = await res.json();
-
             if (!res.ok) {
-                // Mostrar error de validación desde backend
                 await Swal.fire({
                     icon: "error",
                     title: "Error al actualizar",
                     text: data.error || "Ocurrió un error inesperado",
-                    background: "#1e1e1e",
-                    color: "#fff",
-                    confirmButtonColor: "#d33",
+                    background: isLight ? "#ffffff" : "#1e1e1e",
+                    color: isLight ? "#111827" : "#ffffff",
+                    confirmButtonColor: isLight ? "#dc2626" : "#d33",
                 });
             } else {
                 console.log("📝 Título actualizado:", data.message);
-                /*
-                await Swal.fire({
-                    icon: "success",
-                    title: "Título actualizado",
-                    text: data.message || "El título fue guardado correctamente",
-                    timer: 1200,
-                    showConfirmButton: false,
-                    background: "#1e1e1e",
-                    color: "#fff",
-                });
-                */
             }
-        } catch (error) {
-            console.error("❌ Error al actualizar título:", error);
-
+        } catch (e) {
             await Swal.fire({
                 icon: "error",
                 title: "Error de red",
                 text: "No se pudo conectar con el servidor",
-                background: "#1e1e1e",
-                color: "#fff",
-                confirmButtonColor: "#d33",
+                background: isLight ? "#ffffff" : "#1e1e1e",
+                color: isLight ? "#111827" : "#ffffff",
+                confirmButtonColor: isLight ? "#dc2626" : "#d33",
             });
         }
     };
-
     input.addEventListener("blur", save);
     input.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-            input.blur();
-        }
+        if (e.key === "Enter") input.blur();
     });
 };
 
-function toggleGraphSelection(el) {
+window.toggleGraphSelection = function (el) {
     const graphId = el.getAttribute("data-graph-id");
-
-    if (selectedGraphs.has(graphId)) {
-        // Deseleccionado
+    const wasSelected = selectedGraphs.has(graphId);
+    if (wasSelected) {
         selectedGraphs.delete(graphId);
-        el.src = "public/clipboard-plus.svg";
+        el.src = asset("clipPlus");
         el.title = "Agregar al reporte";
     } else {
-        // Seleccionado
         selectedGraphs.add(graphId);
-        el.src = "public/clipboard-check.svg";
+        el.src = asset("clipCheck");
         el.title = "Quitar del reporte";
     }
-
-    console.log("📋 Gráficos seleccionados:", Array.from(selectedGraphs));
-}
-
-window.toggleLabels = (graphId) => {
-  labelsOn[graphId] = !labelsOn[graphId];
-
-  // Cambiar icono y título dinámicamente
-  const card = document.querySelector(`[data-graph-id="${graphId}"]`);
-  if (card) {
-    const btn = card.querySelector('img[onclick^="toggleLabels"]');
-    if (btn) {
-      btn.src = labelsOn[graphId] ? 'public/tag-on.svg' : 'public/tag.svg';
-      btn.title = labelsOn[graphId] ? 'Ocultar etiquetas' : 'Mostrar etiquetas';
-    }
-  }
-
-  // Re-render con el mismo tamaño
-  const graph = originalGraphsData.find(g => g.id === graphId);
-  if (graph && graph.figure) {
-    const size = graphSizes[graphId] || 1;
-    renderPlotlyGraph(graph, size);
-  }
-
-  // Persistir
-  saveGraphConfiguration();
+    console.log("📋 Seleccionados:", Array.from(selectedGraphs));
 };
 
+// Reemplaza TODO el bloque de handleDownloadSelectedGraphs por este:
+window.handleDownloadSelectedGraphs = async function () {
+    const isLight = THEME === "light";
 
-async function handleDownloadSelectedGraphs() {
     if (selectedGraphs.size === 0) {
-        Swal.fire({
+        await Swal.fire({
             icon: "warning",
             title: "Ningún gráfico seleccionado",
             text: "Por favor selecciona algún gráfico para crear el reporte",
             confirmButtonText: "OK",
-            toast: false,
-            position: "center",
-            background: "#1f1f1f",
-            color: "#e0e0e0",
+            background: isLight ? "#ffffff" : "#1f1f1f",
+            color: isLight ? "#111827" : "#e0e0e0",
         });
         return;
     }
@@ -1041,68 +687,98 @@ async function handleDownloadSelectedGraphs() {
         showCancelButton: true,
         confirmButtonText: "Sí, crear",
         cancelButtonText: "Cancelar",
-        background: "#1f1f1f",
-        color: "#e0e0e0",
+        background: isLight ? "#ffffff" : "#1f1f1f",
+        color: isLight ? "#111827" : "#e0e0e0",
     });
-    if (confirmed.isConfirmed) {
-        // Mostrar loader intermedio
-        Swal.fire({
-            title: "Generando reporte...",
-            background: "#1f1f1f",
-            color: "#e0e0e0",
-            showConfirmButton: false,
-            allowOutsideClick: false,
-            allowEscapeKey: false,
-            didOpen: () => {
-                // Forzar render de loader
-                Swal.showLoading();
+    if (!confirmed.isConfirmed) return;
+
+    // ⚠️ NO usar await aquí, para no bloquear la ejecución
+    Swal.fire({
+        title: "Generando reporte...",
+        background: isLight ? "#ffffff" : "#1f1f1f",
+        color: isLight ? "#111827" : "#e0e0e0",
+        showConfirmButton: false,
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => Swal.showLoading(),
+    });
+
+    try {
+        const res = await fetch("/api/create_powerpoint", {
+            method: "POST",
+            credentials: "include", // ← importante si usas cookies
+            headers: {
+                "Content-Type": "application/json",
+                Accept: "application/json",
             },
+            body: JSON.stringify({ graph_ids: Array.from(selectedGraphs) }),
         });
 
-        try {
-            const res = await fetch("/api/create_powerpoint", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ graph_ids: Array.from(selectedGraphs) }),
-            });
-
-            const data = await res.json();
-
-            if (res.ok) {
-                // Reemplazar el loader por el Swal de éxito
-                Swal.fire({
-                    icon: "success",
-                    title: "Reporte generado",
-                    html: `
-                    <p>El Power Point fue creado exitosamente.</p><br>
-                    <div style="display: flex; justify-content: center; align-items: center; gap: 8px;">
-                        <img src="public/download.svg" width="20" height="20" alt="descargar">
-                        <a href="${data.url}" download style="color: #60a5fa; text-decoration: none; font-weight: 500;">
-                            Descargar ahora
-                        </a>
-                    </div>
-                `,
-                    background: "#1f1f1f",
-                    color: "#fff",
-                    confirmButtonText: "Cerrar",
-                });
-
-                selectedGraphs.clear();
-                document.querySelectorAll(".clipboard-toggle").forEach((el) => {
-                    el.src = "public/clipboard-plus.svg";
-                    el.title = "Agregar al reporte";
-                });
-            } else {
-                throw new Error(data.error || "Error desconocido");
+        // Tolerar contenido no-JSON (p.ej., HTML de error del proxy)
+        const ct = (res.headers.get("content-type") || "").toLowerCase();
+        let data = {};
+        if (ct.includes("application/json")) {
+            data = await res.json();
+        } else {
+            const raw = await res.text();
+            try {
+                data = JSON.parse(raw);
+            } catch {
+                data = { error: raw.slice(0, 400) + (raw.length > 400 ? "…" : "") };
             }
-        } catch (error) {
-            Swal.fire({
-                icon: "error",
-                title: "Error",
-                text: error.message,
-                background: "#1f1f1f",
-                color: "#e0e0e0",
-            });
         }
+
+        if (res.ok && data.url) {
+            await Swal.fire({
+                icon: "success",
+                title: "Reporte generado",
+                html: `<p>El Power Point fue creado exitosamente.</p><br>
+               <div style="display:flex;justify-content:center;align-items:center;gap:8px;">
+                 <img src="${asset("download")}" width="20" height="20" alt="descargar">
+                 <a href="${data.url}" download style="${
+                    isLight ? "color:#2563eb" : "color:#60a5fa"
+                };text-decoration:none;font-weight:500;">Descargar ahora</a>
+               </div>`,
+                background: isLight ? "#fff" : "#1f1f1f",
+                color: isLight ? "#1f1f1f" : "#fff",
+                confirmButtonText: "Cerrar",
+            });
+
+            // Reset de selección/íconos
+            selectedGraphs.clear();
+            document.querySelectorAll(".clipboard-toggle").forEach((el) => {
+                el.src = asset("clipPlus");
+                el.title = "Agregar al reporte";
+            });
+        } else {
+            throw new Error(data.error || "No se pudo generar el archivo.");
+        }
+    } catch (e) {
+        await Swal.fire({
+            icon: "error",
+            title: "Error",
+            text: e.message || "Falla desconocida",
+            background: isLight ? "#ffffff" : "#1f1f1f",
+            color: isLight ? "#111827" : "#e0e0e0",
+        });
     }
+};
+
+// ======== Helper de error ========
+function showErrorUnified(message) {
+    const isLight = THEME === "light";
+    const container = document.getElementById("graphs-container-new");
+    if (!container) return;
+    container.innerHTML = `
+    <div style="text-align:center; padding:80px 20px; background:${
+        isLight ? "#ffffff" : "#1e1e1e"
+    }; border-radius:12px; border:1px solid ${isLight ? "#fee2e2" : "#5a1f1f"};">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2" style="margin:0 auto 16px;"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6"/><path d="M9 9l6 6"/></svg>
+      <h3 style="margin:0 0 8px; font-size:18px; font-weight:600; color:#dc2626;">Error</h3>
+      <p style="margin:0; color:${isLight ? "#6b7280" : "#cbd5e1"}; font-size:14px;">${message}</p>
+    </div>`;
 }
+
+// ======== Bootstrap ========
+document.addEventListener("DOMContentLoaded", renderGraphsUnified);
+console.log("✅ GraphsPage unificado cargado -", new Date().toLocaleTimeString());

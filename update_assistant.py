@@ -1,11 +1,11 @@
 import os
 from dotenv import load_dotenv
 from openai import OpenAI, AsyncOpenAI, AsyncAssistantEventHandler,  OpenAIError, AzureOpenAI, AsyncAzureOpenAI
-<<<<<<< Updated upstream
 
-=======
+
+
 load_dotenv() 
->>>>>>> Stashed changes
+
 try:
             
       async_openai_client = AsyncAzureOpenAI(
@@ -20,10 +20,9 @@ try:
             api_version="2024-05-01-preview"
       )
       
-<<<<<<< Updated upstream
-=======
-      
->>>>>>> Stashed changes
+
+    
+
       assistant = sync_openai_client.beta.assistants.retrieve(os.environ.get("AZURE_OPENAI_ASSISTANT_ID"))
       
       #Cambia el nombre del asistente
@@ -356,8 +355,7 @@ try:
    {
       "type":"function",
       "function":{
-<<<<<<< Updated upstream
-=======
+
          "name":"getdataGSQLS",
          "description":"Busca datos en la base de datos GCP SQL Server",
          "strict":true,
@@ -379,7 +377,7 @@ try:
    {
       "type":"function",
       "function":{
->>>>>>> Stashed changes
+
          "name":"pdf_tool",
          "description":"Despliega pdf en un visor en el front",
          "strict":true,
@@ -434,8 +432,6 @@ try:
          }
       }
    },
-<<<<<<< Updated upstream
-=======
    {
       "type":"function",
       "function":{
@@ -462,8 +458,7 @@ try:
          }
       }
    }
->>>>>>> Stashed changes
-]
+      ]
 
       my_updated_assistant = sync_openai_client.beta.assistants.update(
             assistant_id="asst_qavU1q2xOM93rag16rKHZmYX",           

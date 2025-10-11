@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request, Depends, HTTPException, Cookie
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi import Body, Depends
@@ -25,6 +25,8 @@ from pptx import Presentation
 from pptx.util import Inches
 import plotly.io as pio
 import uuid
+from dotenv import load_dotenv
+load_dotenv() 
 
 # Crear la aplicación FastAPI
 app = FastAPI()
@@ -135,27 +137,30 @@ def get_pinned_graphs(user = Depends(get_user_from_cookie)):
         print("\n🔍 Buscando elementos pineados...")
         query = text("""
             SELECT 
-                e.id as element_id,
-                e."threadId",
-                e.type,
-                e.url,
-                e.name,
-                e.display,
-                e."objectKey",
-                e.mime,
-                e.props,
-                e.pin,
-                e.pin_title,
-                e.created_at,
-                t.id as thread_id,
-                t."userIdentifier",
-                t."createdAt"
+            e.id as element_id,
+            e."threadId",
+            e.type,
+            e.url,
+            e.name,
+            e.display,
+            e."objectKey",
+            e.mime,
+            e.props,
+            e.pin,
+            e.pin_title,
+            e.created_at,
+            e.pin_update,            -- NUEVO
+            e.pin_update_at,         -- NUEVO
+            t.id as thread_id,
+            t."userIdentifier",
+            t."createdAt"
             FROM elements e
             JOIN threads t ON e."threadId" = t.id
             WHERE e.type = 'plotly' 
             AND e.pin = 1
             AND t."userIdentifier" = :user_identifier
-            ORDER BY t."createdAt" Desc
+            ORDER BY t."createdAt" DESC
+
         """)
         
         print(f"🔄 Ejecutando consulta para usuario: {user['identifier']}")
@@ -203,6 +208,16 @@ def get_pinned_graphs(user = Depends(get_user_from_cookie)):
                         print(f"❌ Archivo no encontrado en ninguna ubicación")
                         figure_data = None
                 
+               # Elegir fecha a mostrar: si pin_update=1 y hay pin_update_at => úsala, si no created_at
+                display_date = None
+                try:
+                    if getattr(row, "pin_update", None) == 1 and getattr(row, "pin_update_at", None):
+                        display_date = row.pin_update_at  # ya viene varchar 'YYYY-MM-DD'
+                    elif row.created_at:
+                        display_date = row.created_at.strftime("%d-%m-%Y")
+                except Exception:
+                    display_date = row.created_at.strftime("%d-%m-%Y") if row.created_at else None
+
                 graph_data = {
                     "id": str(row.element_id),
                     "threadId": str(row.thread_id),
@@ -212,7 +227,11 @@ def get_pinned_graphs(user = Depends(get_user_from_cookie)):
                     "display": row.display,
                     "figure": figure_data,
                     "pin_title": row.pin_title,
-                    "created_at": row.created_at.strftime("%d-%m-%Y") if row.created_at else None
+                    "created_at": row.created_at.strftime("%d-%m-%Y") if row.created_at else None,
+                    "objectKey": row.objectKey,                               # NUEVO
+                    "pin_update": int(row.pin_update) if row.pin_update is not None else 0,  # NUEVO
+                    "pin_update_at": row.pin_update_at,                       # NUEVO (varchar)
+                    "display_date": display_date                              # NUEVO (lo usaremos en el header)
                 }
                 graphs.append(graph_data)
                 print("✅ Gráfico agregado a la lista")
@@ -398,11 +417,11 @@ def create_powerpoint(payload: dict = Body(...), user=Depends(get_user_from_cook
  
 # Ruta para la página de gráficos
 @app.get("/graphs", response_class=HTMLResponse)
-async def graphs_page(request: Request):
-    return templates.TemplateResponse(
-        "graphs.html",
-        {"request": request}
-    )
+async def graphs_page(request: Request, access_token: Optional[str] = Cookie(None)):
+    # Si no hay cookie de sesión, manda a login y vuelve a /graphs
+    if not access_token:
+        return RedirectResponse(url="/login?next=/graphs", status_code=307)
+    return templates.TemplateResponse("graphs.html", {"request": request})
     
 # Ruta para la página de gráficos
 @app.get("/metrics", response_class=HTMLResponse)
@@ -909,6 +928,246 @@ def get_last_analisis_ia(payload: dict = Body(None), user=Depends(get_user_from_
         return JSONResponse(content={"error": str(e)}, status_code=500)
     finally:
         session.close()
+
+@app.post("/api/refresh-graph")
+def refresh_graph(payload: dict = Body(...), user=Depends(get_user_from_cookie)):
+    print("\n🧪 [refresh-graph] Paso 4 — ejecutar SQL cliente, actualizar chart.json y marcar flags")
+    session = None
+    try:
+        graph_id = payload.get("id")
+        if not graph_id:
+            print("❌ [refresh-graph] Falta 'id' en el payload")
+            return JSONResponse(content={"error": "Falta el parámetro 'id'."}, status_code=400)
+
+        user_identifier = user["identifier"]
+        print(f"🆔 [refresh-graph] graph_id = {graph_id}")
+        print(f"👤 [refresh-graph] user = {user_identifier}")
+
+        session = Session()
+        print("🔌 [refresh-graph] Sesión DB abierta")
+
+        # 1) Traer el element y validar pertenencia
+        sql_lookup = text("""
+            SELECT
+                e.id,
+                e."threadId",
+                e."objectKey",
+                e.pin_sql
+            FROM elements e
+            JOIN threads t ON e."threadId" = t.id
+            WHERE e.id = :graph_id
+              AND t."userIdentifier" = :user_identifier
+            LIMIT 1
+        """)
+        row = session.execute(sql_lookup, {"graph_id": graph_id, "user_identifier": user_identifier}).fetchone()
+
+        if not row:
+            print("❌ [refresh-graph] No se encontró el gráfico o no pertenece al usuario")
+            return JSONResponse(content={"error": "Gráfico no encontrado o no te pertenece."}, status_code=404)
+
+        object_key = row.objectKey
+        pin_sql = row.pin_sql
+
+        print(f"📦 [refresh-graph] objectKey = {object_key}")
+        print(f"🧾 [refresh-graph] pin_sql {'OK' if pin_sql else 'VACÍO/NULL'}")
+
+        if not object_key:
+            print("❌ [refresh-graph] El gráfico no tiene 'objectKey' (ruta del chart.json)")
+            return JSONResponse(content={"error": "El gráfico no tiene ruta de chart.json (objectKey)."}, status_code=400)
+
+        if not pin_sql or not str(pin_sql).strip():
+            print("ℹ️ [refresh-graph] El gráfico no cuenta con una consulta SQL almacenada (pin_sql vacío)")
+            return JSONResponse(
+                content={"status": "no_sql", "message": "Tu gráfico no cuenta con una consulta SQL almacenada."},
+                status_code=200
+            )
+
+        # ---------------------------------------------------------------------
+        # 2) Ejecutar la SQL del cliente según .env, mapear a x/y y actualizar chart.json
+        # ---------------------------------------------------------------------
+        from urllib.parse import quote_plus
+        from pathlib import Path
+        import os, json
+        from datetime import datetime
+
+        def _cfg(k, default=None):
+            try:
+                return config.get(k, os.getenv(k, default))
+            except NameError:
+                return os.getenv(k, default)
+
+        tipo = (_cfg("BD_TIPO_UPDATE_GRAPHICS", "MYSQL") or "MYSQL").upper()
+        print(f"🔧 [refresh-graph] BD_TIPO_UPDATE_GRAPHICS = {tipo}")
+
+        # --- 2.a Ejecutar consulta en el motor cliente y dejar datos en rows_out/keys_out ---
+        rows_out, keys_out = None, None
+
+        if tipo == "MYSQL":
+            import mysql.connector
+            host = _cfg("DB_HOST")
+            port = int(_cfg("DB_MYSQL_PORT", "3306"))
+            user = _cfg("DB_USER")
+            pwd  = _cfg("DB_PASSWORD")
+            name = _cfg("DB_NAME")
+            if not all([host, user, name]):
+                raise RuntimeError("Credenciales MySQL incompletas (DB_HOST, DB_MYSQL_PORT, DB_USER, DB_PASSWORD, DB_NAME).")
+
+            print(f"🔗 [refresh-graph] Conectando (mysql.connector) a {host}:{port}/{name} …")
+            db_conn = mysql.connector.connect(host=host, port=port, user=user, password=pwd, database=name)
+            cur = db_conn.cursor(dictionary=True)
+            print("▶️  [refresh-graph] Ejecutando pin_sql (MySQL)…")
+            cur.execute(pin_sql)
+            rows_out = cur.fetchall()   # list[dict]
+            keys_out = list(rows_out[0].keys()) if rows_out else []
+            print(f"✅ [refresh-graph] pin_sql OK — filas: {len(rows_out)} columnas: {keys_out[:5]}{'…' if len(keys_out)>5 else ''}")
+            for i, r in enumerate(rows_out[:3]):
+                print(f"   · row[{i}]: {r}")
+            cur.close()
+            db_conn.close()
+
+        elif tipo in ("MSSQL", "MSSQL_AZURE", "MSSQL_GCP"):
+            from sqlalchemy import create_engine
+            d_is_azure = tipo in ("MSSQL", "MSSQL_AZURE")
+            if d_is_azure:
+                server   = _cfg("DB_ASQLS_SERVER")
+                database = _cfg("DB_ASQLS_DATABASE")
+                user     = _cfg("DB_ASQLS_USERNAME")
+                pwd      = _cfg("DB_ASQLS_PASSWORD")
+                driver   = _cfg("DB_ASQLS_DRIVER", "ODBC Driver 18 for SQL Server")
+                if not all([server, database, user, pwd, driver]):
+                    raise RuntimeError("Credenciales Azure SQL incompletas (DB_ASQLS_*).")
+            else:
+                server   = _cfg("DB_GCP_SQLS_SERVER")
+                database = _cfg("DB_CP_SQLS_DATABASE") or _cfg("DB_GCP_SQLS_DATABASE")
+                user     = _cfg("DB_DB_GCP_SQLS_USERNAME") or _cfg("DB_GCP_SQLS_USERNAME")
+                pwd      = _cfg("DB_GCP_SQLS_PASSWORD")
+                driver   = _cfg("DB_GCP_SQLS_DRIVER", "ODBC Driver 18 for SQL Server")
+                if not all([server, database, user, pwd, driver]):
+                    raise RuntimeError("Credenciales GCP SQL Server incompletas (DB_GCP_SQLS_*).")
+
+            dsn = (
+                f"mssql+pyodbc://{quote_plus(user)}:{quote_plus(pwd)}@{quote_plus(server)}/"
+                f"{quote_plus(database)}?driver={quote_plus(driver)}&TrustServerCertificate=yes"
+            )
+            print(f"🔗 [refresh-graph] Conectando a SQL Server {server}/{database} (driver={driver}) …")
+            engine_cli = create_engine(dsn, echo=True, pool_pre_ping=True, future=True)
+
+            with engine_cli.connect() as conn:
+                print("▶️  [refresh-graph] Ejecutando pin_sql (SQL Server)…")
+                result = conn.execute(text(pin_sql))
+                rows = result.fetchall()
+                cols = result.keys()
+                keys_out = list(cols)
+                rows_out = [dict(zip(keys_out, row)) for row in rows]
+                print(f"✅ [refresh-graph] pin_sql OK — filas: {len(rows_out)} columnas: {keys_out[:5]}{'…' if len(keys_out)>5 else ''}")
+                for i, r in enumerate(rows_out[:3]):
+                    print(f"   · row[{i}]: {r}")
+
+            try:
+                engine_cli.dispose()
+            except Exception:
+                pass
+        else:
+            raise RuntimeError(f"BD_TIPO_UPDATE_GRAPHICS='{tipo}' no soportado. Usa MYSQL | MSSQL_AZURE | MSSQL_GCP.")
+
+        # --- 2.b Mapear columnas → x / y ---
+        if not rows_out:
+            print("ℹ️ [refresh-graph] Consulta devolvió 0 filas; no se actualiza chart.json")
+            return JSONResponse(
+                content={"status": "no_data", "message": "La consulta no devolvió filas."},
+                status_code=200
+            )
+
+        lower_cols = [c.lower() for c in keys_out]
+        if "mes" in lower_cols and "ventas_mensuales" in lower_cols:
+            ix_x = lower_cols.index("mes")
+            ix_y = lower_cols.index("ventas_mensuales")
+        elif len(keys_out) >= 2:
+            ix_x, ix_y = 0, 1
+        else:
+            return JSONResponse(
+                content={"status": "error", "message": "La consulta no posee columnas suficientes para graficar (min 2)."},
+                status_code=400
+            )
+
+        def _to_num(v):
+            try:
+                return float(v)
+            except Exception:
+                return v
+
+        x_values = [list(row.values())[ix_x] for row in rows_out]
+        y_values = [_to_num(list(row.values())[ix_y]) for row in rows_out]
+
+        print(f"📊 [refresh-graph] x({len(x_values)})={x_values[:5]}{'…' if len(x_values)>5 else ''}")
+        print(f"📈 [refresh-graph] y({len(y_values)})={y_values[:5]}{'…' if len(y_values)>5 else ''}")
+
+        # --- 2.c Abrir chart.json existente ---
+        chart_path = (PUBLIC_DIR / "storage" / object_key)
+        print(f"🗂️  [refresh-graph] chart_path = {chart_path}")
+        if not chart_path.exists():
+            return JSONResponse(content={"error": f"No se encontró chart.json en: {str(chart_path)}"}, status_code=400)
+
+        with chart_path.open("r", encoding="utf-8") as f:
+            chart = json.load(f)
+
+        if not isinstance(chart, dict) or "data" not in chart or not isinstance(chart["data"], list) or not chart["data"]:
+            return JSONResponse(content={"error": "chart.json inválido: no contiene 'data'."}, status_code=400)
+
+        # Actualizar el primer trace
+        trace = chart["data"][0]
+        trace["x"] = x_values
+        trace["y"] = y_values
+
+        # ⚠️ Importante: NO forzamos 'text' — deja que Plotly use texttemplate/format del layout
+        if "text" in trace:
+            try:
+                # Elimina un 'text' viejo para evitar que ensucie el render
+                del trace["text"]
+            except Exception:
+                pass
+
+        # --- 2.d Guardar atómicamente ---
+        tmp_path = chart_path.with_suffix(".json.tmp")
+        with tmp_path.open("w", encoding="utf-8") as f:
+            json.dump(chart, f, ensure_ascii=False)
+        tmp_path.replace(chart_path)
+        print("💾 [refresh-graph] chart.json actualizado (write tmp → rename)")
+
+        # --- 2.e Marcar update en DB ---
+        hoy = datetime.now().strftime("%Y-%m-%d")
+        upd = text("""
+            UPDATE elements
+            SET pin_update = 1,
+                pin_update_at = :hoy
+            WHERE id = :graph_id
+        """)
+        session.execute(upd, {"hoy": hoy, "graph_id": graph_id})
+        session.commit()
+        print(f"🟢 [refresh-graph] elements.pin_update=1, pin_update_at='{hoy}'")
+
+        # Respuesta final
+        return JSONResponse(
+            content={
+                "status": "ok",
+                "message": "chart.json actualizado y flags de elemento marcados.",
+                "x_len": len(x_values),
+                "y_len": len(y_values),
+                "pin_update_at": hoy,
+                "objectKey": object_key
+            },
+            status_code=200
+        )
+
+    except Exception as e:
+        print(f"❌ [refresh-graph] Error inesperado: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+    finally:
+        if session is not None:
+            session.close()
+            print("✅ [refresh-graph] Sesión DB cerrada")
+
+
 
 
 @app.get("/mapa", response_class=HTMLResponse)

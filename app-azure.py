@@ -1,6 +1,7 @@
 """
 Punto de entrada principal de la aplicación.
 Integra Chainlit con OpenAI Assistant y la nueva estructura modular.
+ingreso AZURE
 """
 
 import logging
@@ -347,8 +348,27 @@ async def on_chat_start():
         else:
             user_role = "usuario"
     
+    # sistema user_metadata
+    repo = PostgresRepository()
+    user_data = await repo.fetchrow(
+        "SELECT user_metadata FROM users WHERE id = :id",
+        {"id": user.id}
+    )
+    user_metadata = {}
+    
+    try:
+        raw_user_metadata = user_data.get("user_metadata")               
+
+        user_metadata = json.loads(raw_user_metadata) if isinstance(raw_user_metadata, str) else raw_user_metadata or {}               
+        
+    except Exception as e:
+        logger.warning(f"Error al parsear user_metadata del usuario: {e}")
+
+    
     logger.info(f"===== INICIO DE SESIÓN =====")
     logger.info(f"Usuario: {user_id} (Rol: {user_role})")
+    cl.user_session.set('user_metadata',user_metadata)   
+    logger.info(f"user_metadata: {user_metadata}")
     
     
    
@@ -639,6 +659,13 @@ async def main(message: cl.Message):
         modo = "Estas en **Modo razonamiento profundo**: # Primero Piensa bien tu respuesta y explica tu razonamiento antes de resolver la tarea." 
     else:    
         modo = "Estas en **Modo normal**: Piensa bien tu respuesta pero no expliques tu razonamiento al usuario, el modo razonamiento profundo esta desactivado." 
+    
+    logger.info(f"Usuario: {user_id} (Rol: {user_role})")
+    
+    
+    user_metadata = cl.user_session.get('user_metadata')
+    print(f"2 La metadata almacenada en el user sesion es:{user_metadata}")
+    
     
     now = datetime.now() 
     hoy = now.strftime("%d-%m-%Y %H:%M")

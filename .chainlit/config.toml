@@ -36,7 +36,7 @@ edit_message = true
 
 # Authorize users to spontaneously upload files with messages
 [features.spontaneous_file_upload]
-    enabled = false
+    enabled = true
     # Define accepted file types using MIME types
     # Examples:
     # 1. For specific file types:
@@ -46,7 +46,7 @@ edit_message = true
     # 3. For specific file extensions:
     #    accept = { "application/octet-stream" = [".xyz", ".pdb"] }
     # Note: Using "*/*" is not recommended as it may cause browser warnings
-    # accept = ["*/*"]
+    accept = ["image/jpeg", "image/png", "application/pdf"]
     max_files = 20
     max_size_mb = 500
 
@@ -119,6 +119,7 @@ custom_meta_image_url = "https://qagent.store/public/qagent.png"
      display_name = ""
      icon_url = "/public/chart.svg"
      url = "/graphs"
+     
 
 [meta]
 generated_by = "2.5.5"
@@ -126,7 +127,7 @@ generated_by = "2.5.5"
 [server]
 transports = ["websocket"]
 
-spontaneous_file_upload.enabled = "false"
+
 
 
 # íconos https://lucide.dev/ 

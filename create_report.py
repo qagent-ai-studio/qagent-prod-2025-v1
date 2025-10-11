@@ -202,6 +202,8 @@ def generate_report(fecha_inicio: date, fecha_fin: date, cliente: str = "GLobal 
             return [safe_encode(v) for v in value]
         return value
 
+    
+    analisis_ia(fecha_inicio, fecha_fin)
     return safe_encode(reporte)
 
 def insert_report(fecha_reporte: date, resumen_json: dict):
@@ -215,6 +217,173 @@ def insert_report(fecha_reporte: date, resumen_json: dict):
             """),
             {"fecha_reporte": fecha_reporte, "resumen": resumen_limpio},
         )
+
+#==========================================================================================#
+
+
+def get_data_analisis(fecha_inicio, fecha_fin):
+   
+    QUERY = text("""
+        SELECT
+            t.id AS thread_id,
+            t.name AS thread_name,
+            u."identifier" AS usuario,
+            s.id AS step_id,
+            CASE
+                WHEN s.type = 'run' AND f.value IS NOT NULL THEN 'feedback'
+                ELSE s.type
+            END AS type,
+            s.name,
+            CASE
+                WHEN s.type = 'tool' THEN s.input
+                ELSE s.output
+            END AS texto,
+            f.value AS feedback,
+            f."comment" AS feedback_comment,
+            e."type" AS element_type,
+            s."createdAt"
+        FROM public.threads t
+        JOIN public.steps s ON s."threadId" = t.id
+        LEFT JOIN public.users u ON u.id = t."userId"
+        LEFT JOIN public.feedbacks f ON f."forId" = s.id
+        LEFT JOIN public.elements e ON e."forId" = s.id
+        WHERE s."createdAt" BETWEEN :fecha_inicio AND :fecha_fin
+        ORDER BY s."createdAt"
+    """)
+    try:
+           
+        with engine.connect() as conn:
+            df = pd.read_sql_query(
+                QUERY,
+                conn,
+                params={
+                    "fecha_inicio": f"{fecha_inicio} 00:00:00",
+                    "fecha_fin": f"{fecha_fin} 23:59:59",
+                },
+            )
+
+        
+        
+        df['feedback'] = df['feedback'].fillna('')
+        df = df[~(df['type'] == 'run')]
+        df['thread_id'] = df['thread_id'].astype(str)
+        df['step_id'] = df['step_id'].astype(str)
+
+        # Conversión sin metadatos:
+        registros = df.to_dict(orient="records")
+        return registros
+
+    except Exception as e:
+        raise RuntimeError(f"Error al obtener análisis: {e}")
+   
+        
+# Ruta para la página de gráficos
+
+def analisis_ia(fecha_inicio, fecha_fin):
+    
+    logging.info(f"Generarndo análisis IA")
+   
+    import os
+    from dotenv import load_dotenv
+    from openai import AzureOpenAI
+    
+    load_dotenv()
+    
+    client = AzureOpenAI(
+      azure_endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT"),
+      api_key=os.environ.get("AZURE_OPENAI_API_KEY"),
+      api_version="2024-05-01-preview"
+    )
+    try:
+        
+        print(f"solicitando los registros")
+        registros = get_data_analisis(fecha_inicio, fecha_fin)
+        content = json.dumps(registros, ensure_ascii=False)    
+          
+        print(f"Analizando....")  
+        completion = client.chat.completions.create(
+        model="GPT-4.1",
+        temperature=0.5,
+        messages=[
+            {"role": "system", "content": """
+                # Debes analizar un data frame correspondiente a las converzaciones e interacciones de un chat con un Asistente AI
+                ## Explicación de los campos a analizar del Data frame:
+                
+                | Campo            | Comentario                                                                                                                                                    |
+                |------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
+                | thread_id        | Un thread_id es una conversación, cada conversación tiene varias interacciones que están descritas por su tipo (campo type).                                  |
+                | type             | - `user_message`: es la pregunta del usuario<br>- `assistant_message`: es la respuesta del asistente<br>- `tool`: es la herramienta que utilizó el asistente<br>- `feedback`: es un feedback que envía el usuario |
+                | texto            | - Si type es `user_message`, se trata de la pregunta del usuario.<br>- Si es `assistant_message`, es la respuesta y razonamiento del asistente.               |
+                | usuario          | Identificador del usuario.                                                                                                                                    |
+                | feedback         | - Si es `1` es positivo.<br>- Si es `0` es negativo.                                                                                                          |
+                | feedback_comment | Es el comentario del usuario al responder el feedback.                                                                                                        |
+                | createdAt        | La fecha de creación.                                                                                                                                         |
+                
+                Basado en un diccionario de consultas que hacen los usuarios, debes analizar lo siguiente:    
+                1.- El tenor más frecuente de las consultas del usuario, ¿cuales son las preguntas más fecuentes?
+                2.- Los tipos de análisis que solcitan, que información buscan.
+                2.- Análisis de sentimiento en general. 
+                3.- Intenta contar y calificar las conversaciones 
+                
+                | **CALIFICACIÓN DE CONVERSACIÓN** | **DESCRIPCIÓN** |
+                |-------------------------------|----------------|
+                | **Perfecta** | Agente responde sin problemas durante toda la conversación. Genera las consultas a datos adecuadas. |
+                | **Aceptable** | Agente responde sin problemas durante toda la conversación. Se genera una o más consultas a los datos sub-óptimas o la búsqueda en la BBDD no genera resultado. *Ejemplos: No se aplica el filtro por consulta, la consulta SQL no devuelve registros en la BBDD.* |
+                | **Necesita mejorar** | Agente presenta comportamientos erráticos de forma parcial durante la conversación. No genera una consulta a datos o genera una consulta incorrecta. *Ejemplos: Usuario consulta por algo y el agente busca por otra cosa, el agente no ejecuta la query en algún punto de la interacción.* |
+                | **Fallida** | Agente presenta comportamientos erráticos durante toda la conversación. No genera ninguna query frente a las peticiones del usuario o se cae el sistema. *Ejemplos: El agente no ejecuta queries en ningún punto de la interacción, el agente responde en otro idioma, incoherencias.* |
+
+
+                Tienes libertad para hacer algún tro tu análisis y por supuesto las conclusiones e insights. 
+                El formato de respuesta debe estar en HTML, debe quedar listo para incorporarlo entre unas etiquetas <div> existentes,
+                por lo que no uses los <div> iniciales, no uses las comillas ``` ni la etiqueta HTML, solo es necesario 
+                el string, listo para que el sistema lo inserte.
+                
+                No hagas una pregunta final ya que esto se inserta en un reporte fijo.
+                """
+            },
+            {
+                "role": "user",
+                "content": content
+            }  
+            ]
+        )
+
+          
+        print(f"Análisis finalizado....")  
+        res = completion.choices[0].message.content     
+       
+       
+        # Fecha a usar (usa fecha_fin si viene; si no, hoy)
+        fecha_reporte = date.today()
+        fecha_reporte = fecha_reporte.strftime("%d-%m-%Y")
+        
+        html_analisis = (res or "").encode("utf-8", errors="replace").decode("utf-8")
+
+        print(f"Almacenando....")  
+        with engine.begin() as conn:
+            conn.execute(
+                text("""
+                    INSERT INTO public.analisis_ia (fecha, analisis)
+                    VALUES (:fecha, :analisis)
+                    ON CONFLICT (fecha) DO UPDATE
+                    SET analisis = EXCLUDED.analisis,
+                        created_at = now();
+                """),
+                {"fecha": fecha_reporte, "analisis": html_analisis},
+            )
+        
+        print(f"Análisis almacenado....")  
+        return "OK"
+    
+    except Exception as e:
+        print(f"Error generando reporte IA: {repr(e)}")
+        print("ERROR", e)
+        sys.exit(1)
+        
+
+
+
+#==========================================================================================#
 
 if __name__ == "__main__":
     try:

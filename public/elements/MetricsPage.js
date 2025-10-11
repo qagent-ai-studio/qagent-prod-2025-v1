@@ -745,9 +745,7 @@ const renderGraphsInOrder = (data, anterior = null) => {
                   </h3>
                   
                   </div>
-                   <div onclick="analisis()" class="" title="Crear análisis" style="cursor: pointer; margin-right:10px" >
-                        <img src="public/settings.svg" width="20" height="20" />
-                  </div>
+                  
                   
                   <div  class="drag-handle" title="Arrastrar para cambiar de lugar">
                         <img src="public/grip.svg" width="20" height="20" />
