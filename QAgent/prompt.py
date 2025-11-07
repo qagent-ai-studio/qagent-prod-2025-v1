@@ -809,7 +809,7 @@ instrucciones_telegram="""
 preguntas_frecuentes="""
 """
  
-instrucciones = instrucciones_cpp
+instrucciones = ""
 instrucciones_adicionales =""
 
 """
