@@ -92,7 +92,7 @@ class SendMailTool(BaseTool):
     Herramienta para enviar correos electrónicos.
     """
     
-    async def execute(self, email: str, nombre: str, texto: str) -> str:
+    async def execute(self, email: str, nombre: str, texto: str, subject: str) -> str:
         """
         Envía un correo electrónico
         
@@ -109,7 +109,7 @@ class SendMailTool(BaseTool):
             from QAgent.send_mail.send_mailjet import enviar_mail
             
             # Enviar el correo
-            await enviar_mail(email, nombre, texto)
+            await enviar_mail(email, nombre, texto, subject)
             
             logger.info(f"Correo enviado a {email}")
             return f"El mail fue enviado a {nombre} con el siguiente texto: {texto}"
@@ -558,7 +558,7 @@ async def getCurrentDate() -> str:
 
 
 @cl.step(type="tool")
-async def send_mail(email: str, nombre: str, texto: str) -> str:
+async def send_mail(email: str, nombre: str, texto: str, subject:str) -> str:
     """
     Herramienta de Assistant
     Envía un email por medio del asistente.
@@ -572,7 +572,7 @@ async def send_mail(email: str, nombre: str, texto: str) -> str:
         Mensaje de confirmación
     """
     tool = SendMailTool()
-    return await tool.execute(email=email, nombre=nombre, texto=texto)
+    return await tool.execute(email=email, nombre=nombre, texto=texto, subject=subject)
 
 async def get_mysql_schema(table: str) -> str:
     """

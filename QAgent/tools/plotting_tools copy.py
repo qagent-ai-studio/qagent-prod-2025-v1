@@ -19,7 +19,7 @@ class PlotlyChartTool(BaseTool):
     Herramienta para generar gráficos con Plotly.
     """
     
-    async def execute(self, message: str, plotly_json_fig: str) -> str:
+    async def execute(self, message: str, plotly_json_fig: str,  plotly_sql:str) -> str:
         """
         Genera un gráfico Plotly y lo muestra en el chat
         
@@ -50,7 +50,7 @@ class PlotlyChartTool(BaseTool):
                         payload={
                             "thread_id": cl.user_session.get('chainlit_thread_id'),
                             "element_id": element_id,
-                            "plotly_sql":""
+                            "plotly_sql":plotly_sql
                         }
                     )
                 ]
@@ -74,7 +74,7 @@ class PlotlyChartTool(BaseTool):
 
 # Función compatible con la implementación original para mantener CUSTOM_TOOLS
 @cl.step(type="tool")
-async def draw_plotly_chart(message: str, plotly_json_fig: str) -> str:
+async def draw_plotly_chart(message: str, plotly_json_fig: str, plotly_sql: str) -> str:
     """
     Herramienta de Assistant
     Genera un gráfico Plotly.
@@ -87,4 +87,4 @@ async def draw_plotly_chart(message: str, plotly_json_fig: str) -> str:
         Mensaje de éxito o error
     """
     tool = PlotlyChartTool()
-    return await tool.execute(message=message, plotly_json_fig=plotly_json_fig)
+    return await tool.execute(message=message, plotly_json_fig=plotly_json_fig, plotly_sql=plotly_sql)

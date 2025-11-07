@@ -76,6 +76,18 @@ def formatea_duracion(segundos):
         segundos_restantes = int(segundos % 60)
         return f"{minutos}:{segundos_restantes:02d} Min."
 
+# Función para verificar rol de administrador
+def verify_admin_role(user):
+    """Verifica que el usuario tenga rol de administrador"""
+    if not user:
+        raise HTTPException(status_code=401, detail="No autenticado")
+
+    user_metadata = user.get("metadata", {})
+    user_role = user_metadata.get("role", "user").lower()
+
+    if user_role != "admin":
+        raise HTTPException(status_code=403, detail="Acceso denegado: Se requiere rol de administrador")
+
 
 # Función para obtener el usuario actual usando la cookie de sesión de Chainlit
 @app.get("/api/user")
@@ -1174,6 +1186,82 @@ def refresh_graph(payload: dict = Body(...), user=Depends(get_user_from_cookie))
 def mostrar_mapa(request: Request):
     return templates.TemplateResponse("mapa.html", {"request": request})
 
+# ========== ENDPOINTS PARA REPORTE DE CONVERSACIONES ==========
 
+# 1. Página principal del reporte (solo administradores)
+@app.get("/conversations-report", response_class=HTMLResponse)
+async def conversations_report_page(request: Request, user = Depends(get_user_from_cookie)):
+    """
+    Renderiza la página de reporte de conversaciones.
+    Solo accesible para usuarios con rol 'admin'.
+    """
+    verify_admin_role(user)  # Verificar que el usuario sea admin
+    return templates.TemplateResponse(
+        "conversations_report.html",
+        {"request": request}
+    )
+
+# 2. API para obtener datos de conversaciones con filtros
+@app.get("/api/conversations-data")
+def get_conversations_data(
+    fecha_inicio: Optional[str] = None,
+    fecha_fin: Optional[str] = None,
+    usuario: Optional[str] = None,
+    user = Depends(get_user_from_cookie)
+):
+    """
+    API que devuelve los datos de conversaciones en formato JSON.
+    Soporta filtros por fecha de inicio/fin y usuario específico.
+    Los datos incluyen mensajes, herramientas ejecutadas y feedbacks.
+    """
+    try:
+        verify_admin_role(user)
+        from QAgent.services.report_service import ReportService
+        service = ReportService()
+
+        # Log opcional para debugging
+        print(f"📊 Obteniendo conversaciones - Fechas: {fecha_inicio} a {fecha_fin}, Usuario: {usuario}")
+
+        # Cargar threads con todas sus interacciones
+        threads = service.load_threads_with_interactions(
+            fecha_inicio=fecha_inicio,
+            fecha_fin=fecha_fin,
+            user_identifier=usuario
+        )
+
+        return {"threads": threads, "error": None}
+    except Exception as e:
+        print(f"❌ Error obteniendo conversaciones: {str(e)}")
+        return {"threads": [], "error": str(e)}
+
+# 3. Endpoint de verificación de acceso (para control en frontend)
+@app.get("/api/check-reports-access")
+def check_reports_access(user = Depends(get_user_from_cookie)):
+    """
+    Verifica si el usuario actual tiene permisos para acceder a reportes.
+    Usado por el frontend para mostrar modal de acceso denegado si no es admin.
+    """
+    try:
+        user_metadata = user.get("metadata", {})
+        user_role = user_metadata.get("role", "user").lower()
+
+        if user_role == "admin":
+            return {
+                "can_access": True,
+                "redirect_url": "/conversations-report"
+            }
+        else:
+            return {
+                "can_access": False,
+                "message": "Acceso Restringido",
+                "description": "Esta función está disponible solo para administradores. Contacta al administrador del sistema."
+            }
+    except Exception:
+        return {
+            "can_access": False,
+            "message": "Error",
+            "description": "No se pudo verificar los permisos"
+        }
+        
 # Montar Chainlit en la ruta raíz
 mount_chainlit(app=app, target="app.py", path="/") 

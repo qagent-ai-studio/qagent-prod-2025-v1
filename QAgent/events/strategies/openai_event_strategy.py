@@ -11,7 +11,7 @@ import chainlit as cl
 import plotly
 
 from QAgent.events.event_handler import EventStrategy
-from QAgent.services.openai_service import OpenAIService
+from QAgent.services.openai_service import OpenAIService, TokenCounter
 from QAgent.tools import almacenar_interaccion, qtokens
 from QAgent.utils.logging_utils import get_random_response
 
@@ -158,8 +158,18 @@ class OpenAIEventStrategy(EventStrategy):
         assistant_response = text.value
         assistant_sql_query = ""
         
+       
         # Obtener thread ID de Chainlit
         chainlit_thread_id = cl.user_session.get('chainlit_thread_id')
+        try:
+            token_out=TokenCounter.count(assistant_response)
+            TokenCounter.insert(thread_id=chainlit_thread_id, token_out=token_out)
+            print(f"token_out:{token_out}")
+        except Exception as _:
+            logger.debug("TokenCounter handle_text_done: skip log")
+        
+        
+        """
         if chainlit_thread_id:
             thread_id = chainlit_thread_id
             logger.debug(f"Usando thread ID de Chainlit para respuesta: {thread_id}")
@@ -169,8 +179,10 @@ class OpenAIEventStrategy(EventStrategy):
             
         total_tokens = qtokens(assistant_response)
         
+        
         agente = cl.user_session.get("agente")
         await almacenar_interaccion("", assistant_response, assistant_sql_query, thread_id, total_tokens, agente)
+        """
         
         if text.annotations:
             await self._process_annotations(handler, text.annotations)

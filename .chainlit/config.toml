@@ -119,7 +119,11 @@ custom_meta_image_url = "https://qagent.store/public/qagent.png"
      display_name = ""
      icon_url = "/public/chart.svg"
      url = "/graphs"
-     
+[[UI.header_links]]
+     name = "Ver reportes de conversaciones"
+     display_name = ""
+     icon_url = "/public/message-square-more.svg"
+     url = "/conversations-report"
 
 [meta]
 generated_by = "2.5.5"

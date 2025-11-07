@@ -1,0 +1,1757 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Reporte de Conversaciones</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="/public/favicon.png">
+
+    <!-- Feather Icons -->
+    <script src="https://unpkg.com/feather-icons"></script>
+
+    <style>
+        /* Chainlit Variables - Sistema Nativo */
+        :root {
+            /* Tipografía */
+            --font-sans: "Inter", sans-serif;
+            --font-mono: source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+
+            /* Colores Base */
+            --background: 0 0% 100%;
+            --foreground: 0 0% 5%;
+            --card: 0 0% 100%;
+            --card-foreground: 0 0% 5%;
+            --popover: 0 0% 100%;
+            --popover-foreground: 0 0% 5%;
+
+            /* Colores Primarios */
+            --primary: 222 87% 56%;
+            --primary-foreground: 0 0% 100%;
+            --secondary: 210 40% 96.1%;
+            --secondary-foreground: 222.2 47.4% 11.2%;
+
+            /* Colores de Acento */
+            --muted: 0 0% 90%;
+            --muted-foreground: 0 0% 36%;
+            --accent: 0 0% 95%;
+            --accent-foreground: 222.2 47.4% 11.2%;
+
+            /* Colores de Estado */
+            --destructive: 0 84.2% 60.2%;
+            --destructive-foreground: 210 40% 98%;
+            --border: 0 0% 90%;
+            --input: 0 0% 90%;
+            --ring: 340 92% 52%;
+
+            /* Sistema de Radio */
+            --radius: .75rem;
+
+            /* Sidebar - Tema Claro */
+            --sidebar-background: 0 0% 98%;
+            --sidebar-foreground: 240 5.3% 26.1%;
+            --sidebar-primary: 240 5.9% 10%;
+            --sidebar-primary-foreground: 0 0% 98%;
+            --sidebar-accent: 240 4.8% 95.9%;
+            --sidebar-accent-foreground: 240 5.9% 10%;
+            --sidebar-border: 220 13% 91%;
+            --sidebar-ring: 217.2 91.2% 59.8%;
+        }
+
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--font-sans);
+            height: 100vh;
+            overflow: hidden;
+            background: hsl(var(--background));
+            color: hsl(var(--foreground));
+        }
+
+        .app-container {
+            display: flex;
+            height: 100vh;
+        }
+
+        /* ==================== SIDEBAR ==================== */
+        .sidebar {
+            width: 380px;
+            min-width: 380px;
+            max-width: 380px;
+            background: hsl(var(--sidebar-background));
+            border-right: 1px solid hsl(var(--sidebar-border));
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            flex-shrink: 0;
+        }
+
+        .sidebar-header {
+            padding: 12px 20px;
+            border-bottom: 1px solid hsl(var(--sidebar-border));
+            background: hsl(var(--sidebar-background));
+        }
+
+        .sidebar-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: hsl(var(--sidebar-foreground));
+            margin-bottom: 4px;
+        }
+
+        .sidebar-subtitle {
+            font-size: 14px;
+            color: hsl(var(--sidebar-foreground)) / 0.7;
+        }
+
+        .back-button {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: hsl(var(--sidebar-accent));
+            border: 1px solid hsl(var(--sidebar-border));
+            border-radius: var(--radius);
+            font-size: 14px;
+            color: hsl(var(--sidebar-foreground));
+            cursor: pointer;
+            transition: all 0.2s ease;
+            width: fit-content;
+            font-weight: 500;
+        }
+
+        .back-button:hover {
+            background: hsl(var(--sidebar-accent));
+            color: hsl(var(--sidebar-accent-foreground));
+            border-color: hsl(var(--sidebar-border));
+        }
+
+        .back-button i {
+            width: 16px;
+            height: 16px;
+        }
+
+        .threads-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0;
+            background: hsl(var(--sidebar-background));
+        }
+
+        /* Thread content styles - now inside data-sidebar buttons */
+        [data-sidebar="menu-button"] .thread-title {
+            font-size: 15px;
+            font-weight: 500;
+            margin-bottom: 6px;
+            line-height: 1.4;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        [data-sidebar="menu-button"] .thread-meta {
+            font-size: 13px;
+            opacity: 0.7;
+            margin-bottom: 8px;
+        }
+
+        [data-sidebar="menu-button"] .thread-stats {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            opacity: 0.7;
+        }
+
+        [data-sidebar="menu-button"] .thread-stats .badge {
+            background: #f8b900;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        [data-sidebar="menu-button"][data-active="true"] .thread-stats .badge {
+            background: hsl(var(--sidebar-foreground)) / 0.2;
+            color: hsl(var(--sidebar-accent-foreground));
+        }
+
+        /* ==================== MAIN CONTENT ==================== */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: hsl(var(--background));
+        }
+
+        .chat-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid hsl(var(--border));
+            background: hsl(var(--background));
+        }
+
+        .chat-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: hsl(var(--foreground));
+            margin-bottom: 4px;
+        }
+
+        .chat-meta {
+            font-size: 14px;
+            color: hsl(var(--muted-foreground));
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 24px 16px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            background: hsl(var(--background));
+            box-sizing: border-box;
+        }
+
+        .message {
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            width: 100%;
+            position: relative;
+            padding: 0 1rem;
+            box-sizing: border-box;
+        }
+
+        .message.user {
+            flex-direction: row-reverse;
+            justify-content: flex-start;
+        }
+
+        .message.assistant {
+            flex-direction: row;
+            justify-content: flex-start;
+        }
+
+        .message-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .message.user .message-avatar {
+            background: #e5e7eb;
+            color: #374151;
+        }
+
+        .message.assistant .message-avatar {
+            background: transparent;
+            color: transparent;
+            background-image: url('/public/avatar-black.png');
+            background-size: 24px 24px;
+            background-repeat: no-repeat;
+            background-position: center;
+            border: 1px solid hsl(var(--border));
+        }
+
+        .message-content {
+            position: relative;
+            flex: 0 1 auto;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            word-break: break-word;
+            max-width: 70%;
+            min-width: 0;
+            width: auto;
+        }
+
+        .message-content.wide-content {
+            max-width: 80%;
+        }
+
+        .message-bubble {
+            padding: 16px 20px;
+            border-radius: 18px;
+            position: relative;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            word-break: break-word;
+            hyphens: auto;
+            white-space: pre-wrap;
+            width: auto;
+            max-width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
+        }
+
+        .message.user .message-bubble {
+            background: #e5e7eb;
+            color: #374151;
+        }
+
+        .message.assistant .message-bubble {
+            background: transparent;
+            color: hsl(var(--foreground));
+            border: none;
+            box-shadow: none;
+            padding: 0;
+        }
+
+        .message-time {
+            font-size: 12px;
+            color: hsl(var(--muted-foreground));
+            margin-top: 8px;
+            text-align: center;
+        }
+
+        .message.user .message-time {
+            text-align: right;
+        }
+
+        .message.assistant .message-time {
+            text-align: left;
+        }
+
+        /* ==================== LOADING STATE ==================== */
+        .loading-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 400px;
+            color: hsl(var(--muted-foreground));
+        }
+
+        .spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid hsl(var(--border));
+            border-top: 3px solid #174DEA;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 16px;
+        }
+
+        @keyframes spin {
+            from {
+                transform: rotate(0deg);
+            }
+
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* ==================== EMPTY STATE ==================== */
+        .empty-state {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: hsl(var(--muted-foreground));
+            padding: 48px;
+        }
+
+        .empty-state i {
+            font-size: 48px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+
+        .empty-state h3 {
+            font-size: 18px;
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+
+        .empty-state p {
+            font-size: 14px;
+            text-align: center;
+        }
+
+        /* ==================== ERROR STATE ==================== */
+        .error-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 400px;
+            color: hsl(var(--destructive));
+            padding: 24px;
+        }
+
+        .error-message {
+            background: hsl(var(--destructive-foreground));
+            border: 1px solid hsl(var(--destructive));
+            border-radius: var(--radius);
+            padding: 16px 24px;
+            max-width: 500px;
+            text-align: center;
+        }
+
+        /* ==================== FILTERS ==================== */
+        .filters-container {
+            padding: 12px 20px;
+            border-bottom: 1px solid hsl(var(--sidebar-border));
+            background: hsl(var(--sidebar-background));
+        }
+
+        .filter-group {
+            margin-bottom: 12px;
+        }
+
+        .filter-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .filter-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: hsl(var(--sidebar-foreground)) / 0.7;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+            display: block;
+        }
+
+        .filter-input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid hsl(var(--sidebar-border));
+            border-radius: var(--radius);
+            font-size: 14px;
+            background: hsl(var(--sidebar-background));
+            color: hsl(var(--sidebar-foreground));
+            transition: all 0.2s ease;
+        }
+
+        .filter-input:focus {
+            outline: none;
+            border-color: hsl(var(--sidebar-ring));
+            box-shadow: 0 0 0 2px hsl(var(--sidebar-ring) / 0.2);
+        }
+
+        .date-filters {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .filter-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .filter-btn {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid hsl(var(--sidebar-border));
+            border-radius: var(--radius);
+            font-size: 13px;
+            font-weight: 500;
+            background: hsl(var(--sidebar-background));
+            color: hsl(var(--sidebar-foreground));
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .filter-btn:hover {
+            background: hsl(var(--sidebar-accent));
+            color: hsl(var(--sidebar-accent-foreground));
+            border-color: hsl(var(--sidebar-border));
+        }
+
+        .filter-btn.primary {
+            background: #174DEA;
+            color: white;
+            border-color: #174DEA;
+        }
+
+        .filter-btn.primary:hover {
+            background: #1d4ed8;
+            border-color: #1d4ed8;
+        }
+
+        .filter-stats {
+            padding: 8px 12px;
+            background: hsl(var(--sidebar-background));
+            border-radius: var(--radius);
+            font-size: 12px;
+            color: hsl(var(--sidebar-foreground));
+            text-align: center;
+            margin-top: 8px;
+            display: none;
+            border: 1px solid hsl(var(--sidebar-border));
+        }
+
+        .filter-stats.active {
+            display: block;
+        }
+
+        /* Quick Date Buttons */
+        .quick-date-buttons {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 6px;
+        }
+
+        .quick-date-btn {
+            padding: 6px 10px;
+            border: 1px solid hsl(var(--sidebar-border));
+            border-radius: calc(var(--radius) * 0.75);
+            font-size: 12px;
+            font-weight: 500;
+            background: hsl(var(--sidebar-background));
+            color: hsl(var(--sidebar-foreground));
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .quick-date-btn:hover {
+            background: hsl(var(--sidebar-accent));
+            color: hsl(var(--sidebar-accent-foreground));
+            border-color: hsl(var(--sidebar-primary));
+        }
+
+        .quick-date-btn:active {
+            transform: scale(0.98);
+        }
+
+        .quick-date-btn.active {
+            background: #174DEA;
+            color: white;
+            border-color: #174DEA;
+        }
+
+
+        /* ==================== CHAINLIT DATA-SIDEBAR SELECTORS ==================== */
+
+        /* Contenedor Principal */
+        [data-sidebar="content"] {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            overflow: auto;
+        }
+
+        /* Grupos de Elementos */
+        [data-sidebar="group"] {
+            position: relative;
+            display: flex;
+            width: 100%;
+            min-width: 0;
+            flex-direction: column;
+            padding: 0.5rem;
+        }
+
+        /* Menús */
+        [data-sidebar="menu"] {
+            display: flex;
+            width: 100%;
+            min-width: 0;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        /* Items de Menú */
+        [data-sidebar="menu-item"] {
+            position: relative;
+        }
+
+        /* Botones de Menú */
+        [data-sidebar="menu-button"] {
+            display: flex;
+            width: 100%;
+            align-items: center;
+            gap: 0.5rem;
+            overflow: hidden;
+            border-radius: var(--radius);
+            padding: 0.5rem;
+            text-align: left;
+            outline: none;
+            transition: all 0.2s ease;
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: hsl(var(--sidebar-foreground));
+        }
+
+        [data-sidebar="menu-button"]:hover {
+            background: hsl(var(--sidebar-accent));
+            color: hsl(var(--sidebar-accent-foreground));
+        }
+
+        [data-sidebar="menu-button"]:focus-visible {
+            outline: 2px solid hsl(var(--sidebar-ring));
+        }
+
+        /* Labels de Grupo */
+        [data-sidebar="group-label"] {
+            display: flex;
+            height: 2rem;
+            flex-shrink: 0;
+            align-items: center;
+            border-radius: var(--radius);
+            padding: 0 0.5rem;
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: hsl(var(--sidebar-foreground)) / 0.7;
+            transition: all 0.2s ease;
+        }
+
+        /* Contenido de Grupo */
+        [data-sidebar="group-content"] {
+            width: 100%;
+            font-size: 0.875rem;
+        }
+
+        /* Estado Activo */
+        [data-sidebar="menu-button"][data-active="true"] {
+            background: hsl(var(--sidebar-accent));
+            color: hsl(var(--sidebar-accent-foreground));
+            font-weight: 500;
+        }
+
+        /* ==================== SCROLLBAR STYLING ==================== */
+        .threads-container::-webkit-scrollbar,
+        .chat-messages::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .threads-container::-webkit-scrollbar-track,
+        .chat-messages::-webkit-scrollbar-track {
+            background: hsl(var(--muted));
+        }
+
+        .threads-container::-webkit-scrollbar-thumb,
+        .chat-messages::-webkit-scrollbar-thumb {
+            background: hsl(var(--border));
+            border-radius: 3px;
+        }
+
+        .threads-container::-webkit-scrollbar-thumb:hover,
+        .chat-messages::-webkit-scrollbar-thumb:hover {
+            background: hsl(var(--muted-foreground));
+        }
+
+        /* ==================== MARKDOWN STYLES ==================== */
+        .message-bubble h1,
+        .message-bubble h2,
+        .message-bubble h3 {
+            margin: 16px 0 8px 0;
+            font-weight: 600;
+            line-height: 1.3;
+        }
+
+        .message-bubble h1 {
+            font-size: 18px;
+        }
+
+        .message-bubble h2 {
+            font-size: 16px;
+        }
+
+        .message-bubble h3 {
+            font-size: 15px;
+        }
+
+        .message.user .message-bubble h1,
+        .message.user .message-bubble h2,
+        .message.user .message-bubble h3 {
+            color: #374151;
+        }
+
+        .message.assistant .message-bubble h1,
+        .message.assistant .message-bubble h2,
+        .message.assistant .message-bubble h3 {
+            color: hsl(var(--foreground));
+        }
+
+        .message-bubble p {
+            margin: 8px 0;
+            line-height: 1.5;
+        }
+
+        .message-bubble ul,
+        .message-bubble ol {
+            margin: 8px 0;
+            padding-left: 20px;
+        }
+
+        .message-bubble li {
+            margin: 4px 0;
+            line-height: 1.4;
+        }
+
+        .message.user .message-bubble ul,
+        .message.user .message-bubble ol,
+        .message.user .message-bubble li {
+            color: #374151;
+        }
+
+        .message.assistant .message-bubble ul,
+        .message.assistant .message-bubble ol,
+        .message.assistant .message-bubble li {
+            color: hsl(var(--foreground));
+        }
+
+        .message-bubble code {
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .message.user .message-bubble code {
+            background: rgba(0, 0, 0, 0.1);
+            color: #374151;
+        }
+
+        .message.assistant .message-bubble code {
+            background: hsl(var(--muted));
+            color: hsl(var(--foreground));
+        }
+
+        .message-bubble pre {
+            padding: 12px 16px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 12px 0;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+
+        .message.user .message-bubble pre {
+            background: rgba(0, 0, 0, 0.05);
+            color: #374151;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+        }
+
+        .message.assistant .message-bubble pre {
+            background: hsl(var(--muted));
+            color: hsl(var(--foreground));
+            border: 1px solid hsl(var(--border));
+        }
+
+        /* Table wrapper for horizontal scroll */
+        .table-wrapper {
+            overflow-x: auto;
+            margin: 1rem 0;
+            border-radius: var(--radius);
+            border: 1px solid hsl(var(--border));
+            background: hsl(var(--accent));
+        }
+
+        .table-wrapper table {
+            margin: 0;
+            table-layout: fixed;
+            width: 100%;
+            max-width: 100%;
+            border: none;
+            background: hsl(var(--background));
+        }
+
+        .message-bubble table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 12px 0;
+            font-size: 13px;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .message-bubble th,
+        .message-bubble td {
+            padding: 8px 12px;
+            text-align: left;
+            vertical-align: top;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            hyphens: auto;
+            max-width: 200px;
+        }
+
+        .message.user .message-bubble table {
+            border: 1px solid rgba(0, 0, 0, 0.2);
+        }
+
+        .message.user .message-bubble th,
+        .message.user .message-bubble td {
+            border: 1px solid rgba(0, 0, 0, 0.2);
+            color: #374151;
+        }
+
+        .message.user .message-bubble th {
+            background: rgba(0, 0, 0, 0.05);
+            font-weight: 600;
+        }
+
+        .message.assistant .message-bubble table {
+            border: 1px solid hsl(var(--border));
+        }
+
+        .message.assistant .message-bubble th,
+        .message.assistant .message-bubble td {
+            border: 1px solid hsl(var(--border));
+            color: hsl(var(--foreground));
+        }
+
+        .message.assistant .message-bubble th {
+            background: hsl(var(--muted));
+            font-weight: 600;
+        }
+
+        /* ==================== TOOLS AND FEEDBACK STYLES ==================== */
+        .tool-card {
+            background: hsl(var(--accent));
+            border: 1px solid hsl(var(--border));
+            border-radius: var(--radius);
+            margin: 12px 0;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .tool-header {
+            padding: 12px 16px;
+            background: hsl(var(--muted));
+            border-bottom: 1px solid hsl(var(--border));
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .tool-header:hover {
+            background: hsl(var(--muted-foreground) / 0.1);
+        }
+
+        .tool-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .tool-icon {
+            width: 20px;
+            height: 20px;
+            background: #174DEA;
+            color: white;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .tool-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: hsl(var(--foreground));
+        }
+
+        .tool-expand-icon {
+            width: 16px;
+            height: 16px;
+            transition: transform 0.3s ease;
+            color: hsl(var(--muted-foreground));
+        }
+
+        .tool-card.expanded .tool-expand-icon {
+            transform: rotate(180deg);
+        }
+
+        .tool-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+
+        .tool-card.expanded .tool-content {
+            max-height: 800px;
+        }
+
+        .tool-query {
+            padding: 16px;
+            border-bottom: 1px solid hsl(var(--border));
+        }
+
+        .tool-query-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: hsl(var(--muted-foreground));
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .sql-code {
+            background: hsl(var(--background));
+            border: 1px solid hsl(var(--border));
+            border-radius: 6px;
+            padding: 12px;
+            font-family: var(--font-mono);
+            font-size: 13px;
+            line-height: 1.5;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        /* SQL Syntax Highlighting */
+        .sql-keyword {
+            color: #0033B3;
+            font-weight: 600;
+        }
+
+        .sql-function {
+            color: #00627A;
+        }
+
+        .sql-string {
+            color: #067D17;
+        }
+
+        .sql-number {
+            color: #1750EB;
+        }
+
+        .sql-comment {
+            color: #8C8C8C;
+            font-style: italic;
+        }
+
+        .tool-output {
+            padding: 16px;
+        }
+
+        .tool-output-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: hsl(var(--muted-foreground));
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .tool-output-content {
+            font-size: 13px;
+            color: hsl(var(--foreground));
+            line-height: 1.5;
+            max-height: 200px;
+            overflow-y: auto;
+            padding: 8px;
+            background: hsl(var(--background));
+            border: 1px solid hsl(var(--border));
+            border-radius: 6px;
+        }
+
+        /* Feedback Styles */
+        .feedback-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            background: hsl(var(--accent));
+            border: 1px solid hsl(var(--border));
+            border-radius: var(--radius);
+            margin-top: 12px;
+        }
+
+        .feedback-badge {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            font-size: 16px;
+        }
+
+        .feedback-badge.positive {
+            background: #10B981;
+            color: white;
+        }
+
+        .feedback-badge.negative {
+            background: #EF4444;
+            color: white;
+        }
+
+        .feedback-badge.neutral {
+            background: hsl(var(--muted));
+            color: hsl(var(--muted-foreground));
+        }
+
+        .feedback-content {
+            flex: 1;
+        }
+
+        .feedback-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: hsl(var(--muted-foreground));
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+
+        .feedback-comment {
+            font-size: 14px;
+            color: hsl(var(--foreground));
+            line-height: 1.4;
+        }
+
+        .feedback-no-comment {
+            font-style: italic;
+            color: hsl(var(--muted-foreground));
+        }
+
+        /* Interaction Container for better grouping */
+        .interaction-container {
+            margin-bottom: 32px;
+            padding-bottom: 24px;
+            border-bottom: 1px solid hsl(var(--border) / 0.5);
+        }
+
+        .interaction-container:last-child {
+            border-bottom: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <div class="sidebar" id="sidebar" data-sidebar="content">
+            <div class="sidebar-header">
+                <button class="back-button" onclick="goBack()">
+                    <i data-feather="arrow-left"></i>
+                    <span>Volver al Chat</span>
+                </button>
+            </div>
+
+            <!-- Filters Section -->
+            <div class="filters-container" data-sidebar="group">
+                <div class="filter-group" data-sidebar="group-content">
+                    <label class="filter-label" data-sidebar="group-label">Usuario</label>
+                    <select class="filter-input" id="user-filter">
+                        <option value="">Todos los usuarios</option>
+                    </select>
+                </div>
+
+                <div class="filter-group" data-sidebar="group-content">
+                    <label class="filter-label" data-sidebar="group-label">Rangos rápidos</label>
+                    <div class="quick-date-buttons">
+                        <button class="quick-date-btn" onclick="setDateRange('today')">Hoy</button>
+                        <button class="quick-date-btn" onclick="setDateRange('yesterday')">Ayer</button>
+                        <button class="quick-date-btn" onclick="setDateRange('week')">Últimos 7 días</button>
+                        <button class="quick-date-btn" onclick="setDateRange('month')">Últimos 30 días</button>
+                        <button class="quick-date-btn" onclick="setDateRange('thisMonth')">Este mes</button>
+                        <button class="quick-date-btn" onclick="setDateRange('lastMonth')">Mes anterior</button>
+                    </div>
+                </div>
+
+                <div class="filter-group" data-sidebar="group-content">
+                    <label class="filter-label" data-sidebar="group-label">Rango de fechas personalizado</label>
+                    <div class="date-filters">
+                        <input type="date" class="filter-input" id="date-from" placeholder="Desde">
+                        <input type="date" class="filter-input" id="date-to" placeholder="Hasta">
+                    </div>
+                </div>
+
+                <div class="filter-actions">
+                    <button class="filter-btn" onclick="clearFilters()">Limpiar</button>
+                    <button class="filter-btn primary" onclick="applyFilters()">Aplicar</button>
+                </div>
+
+                <div class="filter-stats" id="filter-stats">
+                    <span id="filter-message"></span>
+                </div>
+            </div>
+
+            <div class="threads-container" id="threads-list" data-sidebar="group">
+                <!-- Thread items will be populated by JavaScript -->
+                <div class="loading-container" data-sidebar="group-content">
+                    <div class="spinner"></div>
+                    <p>Cargando conversaciones...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+
+            <!-- Chat Header -->
+            <div class="chat-header">
+                <div class="chat-title" id="chat-title">Selecciona una conversación</div>
+                <div class="chat-meta" id="chat-meta">Elige un thread del panel lateral para ver los mensajes</div>
+            </div>
+
+            <!-- Chat Messages -->
+            <div class="chat-messages" id="chat-messages">
+                <div class="empty-state">
+                    <i data-feather="message-circle"></i>
+                    <h3>No hay conversación seleccionada</h3>
+                    <p>Selecciona un thread del panel lateral para ver el historial de conversación.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript for functionality -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+
+    <script>
+        // Global variables
+        let threadsData = [];
+        let filteredThreads = [];
+        let currentThreadId = null;
+        let allUsersCache = []; // Cache permanente de todos los usuarios
+        let activeFilters = {
+            user: '',
+            dateFrom: '',
+            dateTo: ''
+        };
+
+        // Utility functions
+        function countFeedbacks(interactions) {
+            let positive = 0, negative = 0;
+            interactions.forEach(interaction => {
+                if (interaction.feedbacks) {
+                    interaction.feedbacks.forEach(feedback => {
+                        if (feedback.value === 1) positive++;
+                        else if (feedback.value === 0) negative++;
+                    });
+                }
+            });
+            return { positive, negative };
+        }
+
+        function formatDuration(ms) {
+            if (!ms || ms < 0) return "0:00";
+            const s = Math.floor(ms / 1000);
+            const h = Math.floor(s / 3600);
+            const m = Math.floor((s % 3600) / 60);
+            const sec = s % 60;
+            if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
+            return `${m}:${sec.toString().padStart(2, '0')}`;
+        }
+
+        function formatTime(dateStr) {
+            if (!dateStr) return '';
+            const date = new Date(dateStr);
+            return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function decodeUnicodeEscapes(str) {
+            if (typeof str !== 'string') return str;
+            return str.replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) =>
+                String.fromCharCode(parseInt(hex, 16))
+            );
+        }
+
+        // Set predefined date ranges
+        function setDateRange(range) {
+            const today = new Date();
+            const dateFrom = document.getElementById('date-from');
+            const dateTo = document.getElementById('date-to');
+
+            let fromDate = new Date();
+            let toDate = new Date();
+
+            switch (range) {
+                case 'today':
+                    fromDate = today;
+                    toDate = today;
+                    break;
+                case 'yesterday':
+                    fromDate = new Date(today);
+                    fromDate.setDate(today.getDate() - 1);
+                    toDate = new Date(fromDate);
+                    break;
+                case 'week':
+                    fromDate = new Date(today);
+                    fromDate.setDate(today.getDate() - 7);
+                    toDate = today;
+                    break;
+                case 'month':
+                    fromDate = new Date(today);
+                    fromDate.setDate(today.getDate() - 30);
+                    toDate = today;
+                    break;
+                case 'thisMonth':
+                    fromDate = new Date(today.getFullYear(), today.getMonth(), 1);
+                    toDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+                    break;
+                case 'lastMonth':
+                    fromDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+                    toDate = new Date(today.getFullYear(), today.getMonth(), 0);
+                    break;
+            }
+
+            // Format dates as YYYY-MM-DD for HTML date inputs
+            const formatDate = (date) => {
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            };
+
+            dateFrom.value = formatDate(fromDate);
+            dateTo.value = formatDate(toDate);
+
+            // Update active button state
+            document.querySelectorAll('.quick-date-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            if (event && event.target) {
+                event.target.classList.add('active');
+            }
+        }
+
+        // Load data from API
+        async function loadThreadsData() {
+            const container = document.getElementById('threads-list');
+            container.innerHTML = `
+                <div class="loading-container">
+                    <div class="spinner"></div>
+                    <p>Cargando conversaciones...</p>
+                </div>
+            `;
+
+            try {
+                const params = new URLSearchParams();
+                if (activeFilters.dateFrom) {
+                    params.append('fecha_inicio', activeFilters.dateFrom);
+                }
+                if (activeFilters.dateTo) {
+                    params.append('fecha_fin', activeFilters.dateTo);
+                }
+                if (activeFilters.user) {
+                    params.append('usuario', activeFilters.user);
+                }
+
+                const response = await fetch(`/api/conversations-data?${params}`);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                threadsData = data.threads || [];
+                filteredThreads = [...threadsData];
+
+                // Poblar cache de usuarios solo en la primera carga o cuando no hay filtros de usuario
+                if (allUsersCache.length === 0 || !activeFilters.user) {
+                    const currentUsers = [...new Set(threadsData.map(t => t.usuario))].filter(u => u).sort();
+                    if (currentUsers.length > allUsersCache.length) {
+                        allUsersCache = currentUsers;
+                    }
+                }
+
+                // Initialize filters after loading data
+                initializeFilters();
+
+                renderThreads();
+                updateFilterStats();
+
+                // NO auto-select - let user choose manually
+                // Show empty state until user selects a conversation
+                if (!currentThreadId) {
+                    renderEmptyState();
+                }
+
+            } catch (error) {
+                console.error('Error loading threads:', error);
+                container.innerHTML = `
+                    <div class="error-container">
+                        <div class="error-message">
+                            Error al cargar las conversaciones: ${error.message}
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        // Initialize filters on page load
+        function initializeFilters() {
+            // Populate user dropdown
+            const userFilter = document.getElementById('user-filter');
+            const currentValue = userFilter.value; // Preservar selección actual
+
+            // Usar cache de usuarios si está disponible, sino usar datos actuales
+            const usersToShow = allUsersCache.length > 0 ? allUsersCache :
+                [...new Set(threadsData.map(t => t.usuario))].filter(u => u).sort();
+
+            // Clear existing options except the first one
+            while (userFilter.children.length > 1) {
+                userFilter.removeChild(userFilter.lastChild);
+            }
+
+            usersToShow.forEach(user => {
+                const option = document.createElement('option');
+                option.value = user;
+                option.textContent = user;
+                userFilter.appendChild(option);
+            });
+
+            // Restaurar la selección previa
+            userFilter.value = currentValue;
+        }
+
+
+        // Apply filters (reload from API with all filters)
+        async function applyFilters() {
+            const dateFromValue = document.getElementById('date-from').value;
+            const dateToValue = document.getElementById('date-to').value;
+            const userValue = document.getElementById('user-filter').value;
+
+            // Validate date range
+            if (dateFromValue && dateToValue) {
+                const fromDate = new Date(dateFromValue);
+                const toDate = new Date(dateToValue);
+                if (fromDate > toDate) {
+                    alert('⚠️ La fecha de inicio no puede ser posterior a la fecha de fin');
+                    return;
+                }
+            }
+
+            // Update active filters
+            activeFilters.dateFrom = dateFromValue;
+            activeFilters.dateTo = dateToValue;
+            activeFilters.user = userValue;
+
+            // Reload data from API with all filters applied on server
+            await loadThreadsData();
+        }
+
+        // Clear filters
+        async function clearFilters() {
+            document.getElementById('user-filter').value = '';
+            document.getElementById('date-from').value = '';
+            document.getElementById('date-to').value = '';
+
+            // Clear active state from quick date buttons
+            document.querySelectorAll('.quick-date-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+
+            activeFilters = { user: '', dateFrom: '', dateTo: '' };
+            localStorage.removeItem('conversationFilters');
+
+            await loadThreadsData();
+        }
+
+        // Update filter statistics
+        function updateFilterStats() {
+            const statsElement = document.getElementById('filter-stats');
+            const messageElement = document.getElementById('filter-message');
+
+            const hasActiveFilters = activeFilters.user || activeFilters.dateFrom || activeFilters.dateTo;
+
+            if (hasActiveFilters) {
+                const total = threadsData.length;
+                const filtered = filteredThreads.length;
+
+                if (filtered === 0) {
+                    messageElement.textContent = 'No se encontraron conversaciones con estos filtros';
+                } else if (filtered < total) {
+                    messageElement.textContent = `Mostrando ${filtered} de ${total} conversaciones`;
+                } else {
+                    messageElement.textContent = `Mostrando todas las ${total} conversaciones`;
+                }
+
+                statsElement.classList.add('active');
+            } else {
+                statsElement.classList.remove('active');
+            }
+        }
+
+        // Render threads in sidebar
+        function renderThreads() {
+            const container = document.getElementById('threads-list');
+
+            if (!filteredThreads || filteredThreads.length === 0) {
+                container.innerHTML = '<div data-sidebar="group-content" style="padding: 20px; text-align: center; color: hsl(var(--muted-foreground));">No hay conversaciones</div>';
+                return;
+            }
+
+            const threadsHTML = `
+                <ul data-sidebar="menu">
+                    ${filteredThreads.map((thread, index) => {
+                const interactionCount = thread.interactions?.length || 0;
+                const duration = formatDuration(thread.total_duration_ms || 0);
+
+                // Calculate feedback statistics for sidebar
+                const { positive, negative } = countFeedbacks(thread.interactions || []);
+                const feedbackStats = positive || negative ? ` 👍${positive} 👎${negative}` : '';
+
+                return `
+                            <li data-sidebar="menu-item">
+                                <button data-sidebar="menu-button" onclick="selectThread('${thread.thread_id}', ${index})" data-thread-id="${thread.thread_id}" data-active="false">
+                                    <div style="flex: 1; min-width: 0;">
+                                        <div class="thread-title">${thread.thread_name || 'Sin título'}</div>
+                                        <div class="thread-meta">${thread.usuario || 'Desconocido'} • ${thread.fecha || ''}</div>
+                                        <div class="thread-stats">
+                                            <span>${interactionCount} mensajes${feedbackStats}</span>
+                                            <span class="badge">${duration}</span>
+                                        </div>
+                                    </div>
+                                </button>
+                            </li>
+                        `;
+            }).join('')}
+                </ul>
+            `;
+
+            container.innerHTML = threadsHTML;
+        }
+
+        // Select a thread
+        function selectThread(threadId, index) {
+            currentThreadId = threadId;
+            const thread = filteredThreads[index];
+
+            // Update active state in sidebar using data-active
+            document.querySelectorAll('[data-sidebar="menu-button"]').forEach(button => {
+                button.setAttribute('data-active', 'false');
+            });
+            const selectedButton = document.querySelector(`[data-sidebar="menu-button"][data-thread-id="${threadId}"]`);
+            if (selectedButton) {
+                selectedButton.setAttribute('data-active', 'true');
+            }
+
+            // Update chat header
+            document.getElementById('chat-title').textContent = thread.thread_name || 'Sin título';
+
+            // Calculate feedback statistics
+            const { positive, negative } = countFeedbacks(thread.interactions || []);
+            const feedbackText = positive || negative ? ` • 👍 ${positive} 👎 ${negative}` : '';
+
+            document.getElementById('chat-meta').textContent =
+                `${thread.usuario || 'Desconocido'} • ${thread.fecha || ''} • ${thread.interactions?.length || 0} mensajes${feedbackText}`;
+
+            // Render messages
+            renderMessages(thread);
+        }
+
+        // Render messages
+        function renderMessages(thread) {
+            const container = document.getElementById('chat-messages');
+
+            if (!thread.interactions || thread.interactions.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i data-feather="message-circle"></i>
+                        <h3>No hay mensajes</h3>
+                        <p>Esta conversación no tiene mensajes para mostrar.</p>
+                    </div>
+                `;
+                feather.replace();
+                return;
+            }
+
+            const messagesHTML = thread.interactions.map((interaction, index) => {
+                const userInitials = thread.usuario ? thread.usuario.substring(0, 2).toUpperCase() : 'U';
+
+                // Generar HTML para las herramientas
+                let toolsHTML = '';
+                if (interaction.tools && interaction.tools.length > 0) {
+                    toolsHTML = interaction.tools.map((tool, toolIndex) => {
+                        const toolId = `tool-${index}-${toolIndex}`;
+                        return `
+                            <div class="tool-card" id="${toolId}">
+                                <div class="tool-header" onclick="toggleToolCard('${toolId}')">
+                                    <div class="tool-info">
+                                        <div class="tool-icon">⚡</div>
+                                        <div class="tool-name">${tool.name}</div>
+                                    </div>
+                                    <svg class="tool-expand-icon" viewBox="0 0 16 16" fill="currentColor">
+                                        <path d="M4.5 5.5L8 9L11.5 5.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                </div>
+                                <div class="tool-content">
+                                    ${tool.query ? `
+                                        <div class="tool-query">
+                                            <div class="tool-query-label">Query SQL Ejecutada</div>
+                                            <div class="sql-code">${highlightSQL(tool.query)}</div>
+                                        </div>
+                                    ` : ''}
+                                    ${tool.output ? `
+                                        <div class="tool-output">
+                                            <div class="tool-output-label">Resultado</div>
+                                            <div class="tool-output-content">${escapeHtml(tool.output)}</div>
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+
+                // Generar HTML para el feedback
+                let feedbackHTML = '';
+                if (interaction.feedbacks && interaction.feedbacks.length > 0) {
+                    const feedback = interaction.feedbacks[0]; // Usar el primer feedback
+                    if (feedback && (feedback.value !== null || feedback.comment)) {
+                        const feedbackClass = feedback.value === 1 ? 'positive' :
+                            feedback.value === 0 ? 'negative' : 'neutral';
+                        const feedbackIcon = feedback.value === 1 ? '✓' :
+                            feedback.value === 0 ? '✗' : '•';
+
+                        feedbackHTML = `
+                            <div class="feedback-container">
+                                <div class="feedback-badge ${feedbackClass}">${feedbackIcon}</div>
+                                <div class="feedback-content">
+                                    <div class="feedback-label">Feedback del Usuario</div>
+                                    <div class="${feedback.comment ? 'feedback-comment' : 'feedback-no-comment'}">
+                                        ${feedback.comment || 'Sin comentario'}
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }
+                }
+
+                return `
+                    <div class="interaction-container">
+                        <!-- User Message -->
+                        <div class="message user">
+                            <div class="message-avatar">${userInitials}</div>
+                            <div class="message-content">
+                                <div class="message-bubble" data-md="1">${(interaction.user_text || '').trim()}</div>
+                                <div class="message-time">${formatTime(interaction.user_time)}</div>
+                            </div>
+                        </div>
+
+                        <!-- Tools (if any) -->
+                        ${toolsHTML}
+
+                        <!-- Assistant Message -->
+                        <div class="message assistant">
+                            <div class="message-avatar"></div>
+                            <div class="message-content">
+                                <div class="message-bubble" data-md="1">${(interaction.assistant_text || '').trim()}</div>
+                                <div class="message-time">${formatTime(interaction.assistant_time)}</div>
+                            </div>
+                        </div>
+
+                        <!-- Feedback (if any) -->
+                        ${feedbackHTML}
+                    </div>
+                `;
+            }).join('');
+
+            container.innerHTML = messagesHTML;
+
+            // Process markdown
+            document.querySelectorAll('[data-md="1"]').forEach((el) => {
+                const mdRaw = (el.textContent || '').trim();
+                const mdDecoded = decodeUnicodeEscapes(mdRaw);
+                const html = DOMPurify.sanitize(marked.parse(mdDecoded));
+                el.innerHTML = html;
+            });
+
+            // Wrap tables for horizontal scrolling
+            wrapTablesForScroll();
+
+            // Detect wide content
+            detectWideContent();
+
+            // Replace feather icons
+            feather.replace();
+
+            // Scroll to top
+            container.scrollTop = 0;
+        }
+
+        function renderEmptyState() {
+            const container = document.getElementById('chat-messages');
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i data-feather="message-circle"></i>
+                    <h3>No hay conversación seleccionada</h3>
+                    <p>Selecciona un thread del panel lateral para ver el historial de conversación.</p>
+                </div>
+            `;
+            feather.replace();
+        }
+
+        function wrapTablesForScroll() {
+            // Find all tables in message bubbles that aren't already wrapped
+            document.querySelectorAll('.message-bubble table:not(.table-wrapper table)').forEach(table => {
+                // Skip if table is already wrapped
+                if (table.closest('.table-wrapper')) return;
+
+                // Create wrapper
+                const wrapper = document.createElement('div');
+                wrapper.className = 'table-wrapper';
+
+                // Insert wrapper before table and move table inside
+                table.parentNode.insertBefore(wrapper, table);
+                wrapper.appendChild(table);
+            });
+        }
+
+        function detectWideContent() {
+            document.querySelectorAll('.message-content').forEach(content => {
+                content.classList.remove('wide-content');
+
+                const hasTable = content.querySelector('table');
+                const hasPreCode = content.querySelector('pre');
+                const textContent = content.textContent || '';
+                const hasLongText = textContent.length > 300;
+                const hasLongWords = textContent.split(/\s+/).some(word => word.length > 50);
+
+                if (hasTable || hasPreCode || hasLongWords || hasLongText) {
+                    content.classList.add('wide-content');
+                }
+            });
+        }
+
+
+        function goBack() {
+            window.location.href = '/';
+        }
+
+        // Toggle tool card expanded/collapsed state
+        function toggleToolCard(toolId) {
+            const card = document.getElementById(toolId);
+            if (card) {
+                card.classList.toggle('expanded');
+            }
+        }
+
+        // Escape HTML to prevent XSS
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Highlight SQL syntax
+        function highlightSQL(sql) {
+            if (!sql) return '';
+
+            // Escape HTML first
+            let highlighted = escapeHtml(sql);
+
+            // SQL Keywords
+            const keywords = [
+                'SELECT', 'FROM', 'WHERE', 'JOIN', 'LEFT', 'RIGHT', 'INNER', 'OUTER',
+                'ON', 'AS', 'AND', 'OR', 'NOT', 'IN', 'EXISTS', 'BETWEEN', 'LIKE',
+                'ORDER', 'BY', 'GROUP', 'HAVING', 'UNION', 'ALL', 'DISTINCT',
+                'INSERT', 'INTO', 'VALUES', 'UPDATE', 'SET', 'DELETE', 'CREATE',
+                'ALTER', 'DROP', 'TABLE', 'INDEX', 'VIEW', 'DATABASE', 'GRANT',
+                'REVOKE', 'CASE', 'WHEN', 'THEN', 'ELSE', 'END', 'WITH', 'LIMIT',
+                'OFFSET', 'COUNT', 'SUM', 'AVG', 'MIN', 'MAX', 'YEAR', 'MONTH',
+                'DATE', 'CAST', 'CONVERT', 'COALESCE', 'NULLIF', 'TOP', 'LEAD',
+                'LAG', 'OVER', 'PARTITION', 'RUNNING', 'CROSS', 'APPLY', 'PIVOT'
+            ];
+
+            // Replace keywords with highlighted versions
+            keywords.forEach(keyword => {
+                const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
+                highlighted = highlighted.replace(regex, `<span class="sql-keyword">${keyword}</span>`);
+            });
+
+            // Highlight functions (words followed by parenthesis)
+            highlighted = highlighted.replace(/\b([A-Z_]+)\s*(?=\()/gi, '<span class="sql-function">$1</span>');
+
+            // Highlight strings (single quotes)
+            highlighted = highlighted.replace(/'([^']*)'/g, '<span class="sql-string">\'$1\'</span>');
+
+            // Highlight numbers
+            highlighted = highlighted.replace(/\b(\d+\.?\d*)\b/g, '<span class="sql-number">$1</span>');
+
+            // Highlight comments (-- style)
+            highlighted = highlighted.replace(/--.*$/gm, '<span class="sql-comment">$&</span>');
+
+            return highlighted;
+        }
+
+        // Initialize the app
+        document.addEventListener('DOMContentLoaded', async function () {
+            try {
+
+                // Primero cargar sin filtros para obtener todos los usuarios
+                activeFilters = { user: '', dateFrom: '', dateTo: '' };
+                await loadThreadsData();
+
+                // Ahora establecer filtros por defecto (últimos 30 días) y recargar
+                const today = new Date();
+                const thirtyDaysAgo = new Date();
+                thirtyDaysAgo.setDate(today.getDate() - 30);
+
+                // Format dates as YYYY-MM-DD
+                const formatDate = (date) => {
+                    const year = date.getFullYear();
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const day = String(date.getDate()).padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                };
+
+                // Set initial filters to last 30 days
+                activeFilters = {
+                    user: '',
+                    dateFrom: formatDate(thirtyDaysAgo),
+                    dateTo: formatDate(today)
+                };
+
+                // Display in the date inputs
+                document.getElementById('date-from').value = activeFilters.dateFrom;
+                document.getElementById('date-to').value = activeFilters.dateTo;
+
+                // Load threads data with default filters
+                await loadThreadsData();
+
+                // Initialize feather icons
+                feather.replace();
+            } catch (error) {
+                console.error('Error initializing app:', error);
+                // Even if initialization fails, continue with basic functionality
+                try {
+                    await loadThreadsData();
+                    feather.replace();
+                } catch (e) {
+                    console.error('Critical error loading data:', e);
+                }
+            }
+        });
+
+    </script>
+</body>
+
+</html>

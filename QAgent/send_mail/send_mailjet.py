@@ -9,7 +9,7 @@ from jinja2 import Template
 from QAgent.config.config_manager import config
 logger = logging.getLogger(__name__)
 
-async def enviar_mail(email: str, nombre: str, texto: str) -> str:
+async def enviar_mail(email: str, nombre: str, texto: str, subject: str) -> str:
     """
     Envía un correo simple usando la API HTTP de Mailjet (equivalente a la llamada cURL).
     
@@ -43,7 +43,7 @@ async def enviar_mail(email: str, nombre: str, texto: str) -> str:
                             "Name": nombre
                         }
                     ],
-                    "Subject": "Mensaje de QAgent test 4",
+                    "Subject": subject,
                     "TextPart": texto,
                     "HTMLPart": f"<p>{texto}</p>",
                     "CustomID": "QAgent-SimpleMail"

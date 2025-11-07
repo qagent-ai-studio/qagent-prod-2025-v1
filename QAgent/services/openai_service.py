@@ -7,7 +7,6 @@ import logging
 from typing import Dict, Any, Optional, List
 from pathlib import Path
 from chainlit.element import Element
-
 from openai import OpenAI, AsyncOpenAI, OpenAIError
 from openai import OpenAI, AsyncOpenAI, AsyncAssistantEventHandler,  OpenAIError, AzureOpenAI, AsyncAzureOpenAI
 # Removemos la importación específica que causa problemas
@@ -16,6 +15,56 @@ from openai import OpenAI, AsyncOpenAI, AsyncAssistantEventHandler,  OpenAIError
 from QAgent.config.config_manager import config
 
 logger = logging.getLogger(__name__)
+
+# --- imports tiktoken ---
+import chainlit as cl
+import uuid, json
+import tiktoken
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
+# ----------------------
+
+# justo después de cargar config/DB_URL:
+# from QAgent.config.config_manager import config
+
+class TokenCounter:
+    _enc = tiktoken.get_encoding("cl100k_base")
+    _engine = create_engine(config.get('DB_URL'))
+    _Session = sessionmaker(bind=_engine)
+
+    @classmethod
+    def count(cls, s: str) -> int:
+        if not s:
+            return 0
+        return len(cls._enc.encode(s))
+
+    @classmethod
+    def insert(cls, thread_id: str, token_in: int = 0, token_out: int = 0):
+       
+        
+        session = cls._Session()
+        _id = str(uuid.uuid4()) 
+               
+        try:
+            print("Antes de session")
+            session.execute(
+                text("INSERT INTO tokens (id, id_thread, token_in, token_out) "
+                     "VALUES (:id, :thread_id, :token_in, :token_out)"),
+                {
+                    "id": _id,
+                    "thread_id": thread_id,
+                    "token_in": int(token_in or 0),
+                    "token_out": int(token_out or 0),
+                }
+            )
+            print("Despues de session")
+            session.commit()
+        except OpenAIError as e:
+            logger.error(f"al insertar tokens: {e}")
+        finally:
+            session.close()
+
+
 
 class OpenAIService:
     """
@@ -121,6 +170,15 @@ class OpenAIService:
         Returns:
             Mensaje creado
         """
+        
+        chainlit_thread_id = cl.user_session.get('chainlit_thread_id')
+        token_in=TokenCounter.count(content)
+        try:
+            TokenCounter.insert(thread_id=chainlit_thread_id, token_in=token_in)
+            print(f"token_in 1:{token_in}")
+        except Exception as _:
+            logger.debug("TokenCounter add_message_to_thread: skip log")
+    
         try:
             
             message = await self._async_client.beta.threads.messages.create(
@@ -187,6 +245,16 @@ class OpenAIService:
             tool_outputs: Lista de salidas de herramientas
             event_handler_creator: Función para crear un manejador de eventos
         """
+        
+        try:
+            chainlit_thread_id = cl.user_session.get('chainlit_thread_id')
+            payload_str = json.dumps(tool_outputs, ensure_ascii=False)
+            token_in=TokenCounter.count(payload_str)
+            TokenCounter.insert(thread_id=chainlit_thread_id, token_in=token_in)
+            print(f"token_in 2:{token_in}")
+        except Exception as _:
+            logger.debug("TokenCounter submit_tool_outputs: skip log")
+    
         try:
             # Creamos un nuevo event handler para cada submit_tool_outputs
             event_handler = event_handler_creator()
