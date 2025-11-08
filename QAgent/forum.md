@@ -61,41 +61,114 @@
 
 ---
 
-El sistema tiene acceso a dos tablas: clientes y descuentos.
-Responde a las preguntas del usuario generando consultas SQL en MySQL correctas y optimizadas.
-Las tablas están relacionadas por los campos hed_local, hed_pos y hed_numtrx (que representan la misma transacción).
+### Tabla 'header'
 
-### Esquema disponible:
+| Campo               | Descripción                                                          | Tipo    | Dato de ejemplo              |
+| ------------------- | -------------------------------------------------------------------- | ------- | ---------------------------- |
+| hed_local           | Código del local de venta                                            | INT     | 123                          |
+| hed_pos             | Identificador de terminal POS                                        | INT     | 100                          |
+| hed_numtrx          | Número correlativo de transacción                                    | INT     | 155742756                    |
+| hed_fechatrx        | Fecha efectiva de la transacción                                     | DATE    | 2025-08-13 00:00:00          |
+| hed_horatrx         | Hora de la transacción                                               | VARCHAR | 15:57:42                     |
+| hed_origen          | Origen de la transacción, valores posibles                           | INT     | 1                            |
+| hed_numdoc          | Número de documento                                                  | INT     | 907657                       |
+| hed_turno           |                                                                      | INT     | 0                            |
+| hed_fcontable       | Fecha contable de la transacción                                     | DATE    | 2025-08-13 00:00:00          |
+| hed_cajero          | Identificador del cajero                                             | INT     | 123                          |
+| hed_tipotrx         | Tipo de transacción                                                  | VARCHAR | V                            |
+| hed_subtipo         |                                                                      | VARCHAR | WS                           |
+| hed_tipodoc         | Tipo de documento                                                    | VARCHAR | NE                           |
+| hed_brutopos        | Monto bruto positivo                                                 | INT     | 59990                        |
+| hed_brutoneg        | Monto bruto negativo                                                 | INT     | 17997                        |
+| hed_impuesto        | Monto total de impuestos aplicados                                   | INT     | 670500                       |
+| hed_pagtrx          | Cantidad de pagos de la transacción                                  | INT     | 1                            |
+| hed_prodtrx         | cantidad de productos de la transacción                              | INT     | 1                            |
+| hed_nomclte         | Nombre del cliente                                                   | VARCHAR | CLAUDIA BASCUR               |
+| hed_dirclte         | Dirección del cliente                                                | VARCHAR | ARABIA SAUDITA 116           |
+| hed_comuna          | Comuna del cliente                                                   | VARCHAR | VALDIVIA                     |
+| hed_ciudad          | Ciudad del cliente                                                   | VARCHAR | VALDIVIA                     |
+| hed_fono            | Teléfono de contacto del cliente                                     | INT     | 56985188270                  |
+| hed_giro            | Giro comercial del cliente                                           | VARCHAR | PARTICULAR                   |
+| hed_total           | Total neto de la transacción                                         | INT     | 41993                        |
+| hed_numdoc_origen   | Número de documento de origen de la venta para una Nota de Credito   | INT     | 46455872                     |
+| hed_local_origen    | Local de origen de la venta para una Nota de Credito                 | INT     | 178                          |
+| hed_pos_origen      | Pos de origen de la venta para una Nota Credito                      | INT     | 1                            |
+| hed_numtrx_origen   | Número de transacción de origen de la venta para una Nota de Credito | INT     | 2956                         |
+| hed_fechatrx_origen | Fecha de origen de la venta para una Nota de Credito                 | DATE    | 2025-08-05 00:00:00          |
+| hed_horatrx_origen  | Hora de origen de la venta para una Nota de Credito                  | VARCHAR | 19:40:03                     |
+| hed_anulado         | Indica si la transacción está anulada (‘S’/‘N’)                      | VARCHAR | N                            |
+| hed_factor          | Indicador de Nota de Crédito                                         | INT     | -1                           |
+| hed_promrut         | Rut del Cliente Fidelizado                                           | INT     | 139826256                    |
+| hed_promtipo        | Tipo de Cliente Fidelizado                                           | VARCHAR | P                            |
+| hed_usuario1        | Campo de uso libre 1                                                 | INT     | 10072142703900               |
+| hed_usuario2        | Campo de uso libre 2                                                 | VARCHAR | claudiabascurtapia@gmail.com |
+| hed_usuario3        | Campo de uso libre 3                                                 | VARCHAR | HUSHPUPPIES                  |
 
-Tabla clientes
-Contiene información del cliente y la transacción.
-Campos principales:
+---
 
-hed_local, hed_pos, hed_numtrx, hed_fechatrx, hed_horatrx, hed_fcontable
+### Tabla 'pagos'
 
-cli_nombre, cli_apellido, cli_mail, cli_telefono, cli_chileno, cli_genero, hed_fecha_nacimiento
+| Campo         | Descripción                                                                  | Tipo    | Dato de ejemplo     |
+| ------------- | ---------------------------------------------------------------------------- | ------- | ------------------- |
+| hed_local     | Número de local                                                              | INT     | 68                  |
+| hed_pos       | Número de pos                                                                | INT     | 1                   |
+| hed_numtrx    | Número de la transacción                                                     | INT     | 4356                |
+| hed_fechatrx  | Fecha de la transacción                                                      | DATE    | 2025-08-01 00:00:00 |
+| hed_horatrx   | Hora de la transacción                                                       | VARCHAR | 20:59:59            |
+| pag_corrpago  | Correlativo del pago                                                         | INT     | 1                   |
+| pag_tipopago  | Código de la forma de pago                                                   | INT     | 4                   |
+| pag_fcontable | Fecha contable                                                               | DATE    | 2025-08-01 00:00:00 |
+| pag_tipotrx   | Tipo de la transacción                                                       | VARCHAR | V                   |
+| pag_subtipo   | Subtipo de pago                                                              | VARCHAR | WS                  |
+| pag_cajero    | Cajero de la transacción                                                     | INT     | 68                  |
+| pag_monto     | Monto del pago                                                               | INT     | 127992              |
+| pag_vuelto    | Monto del vuelto                                                             | INT     | 0                   |
+| pag_anulado   | Flag que indica si el pago está anulado o no                                 | VARCHAR | N                   |
+| pag_numdoc    | Número del documento de la transacción                                       | INT     | 47184841            |
+| pag_codbanco  | Código del banco del cheque                                                  | INT     | 3                   |
+| pag_fechaven  | Fecha de vencimiento del cheque                                              | DATE    | 2025-08-01 00:00:00 |
+| pag_codmoneda | Código de moneda: 0 - Peso chileno 1 - Dólar americano                       | INT     | 0                   |
+| pag_montocamb | Monto de cambio                                                              | DOUBLE  | 10.0                |
+| pag_tipocamb  | Tipo de cambio                                                               | DOUBLE  | 0.0                 |
+| pag_origen    | Indica si el pago fue generado en el POS o en IRS: C - Cuadratura NULL - POS | VARCHAR | C                   |
+| pag_tipodoc   | Tipo de documento de la transacción                                          | VARCHAR | BE                  |
+| pag_factor    | Indicador de Nota de Crédito: -1 - NC 1 - Otros documentos                   | INT     | 1                   |
+| pag_vendedor  | Código del vendedor                                                          | INT     | 127340              |
 
-Tabla descuentos
-Contiene información de descuentos aplicados a los productos o transacciones.
-Campos principales:
+**Catalogos de campos de pagos**
+pag_tipotrx: valores posibles: P = Recaudación, Null en caso contrario
+pag_subtipo: valores posibles si pag_tipotrx es recaudación: EC = Ecommerce, WS = WoodStock, PT = Patagnia, GF = GiftCard, En caso contrario, es null
+pag_anulado: N = No Anulado, S = Anulado
+pag_origen:
 
-hed_local, hed_pos, hed_numtrx, hed_fechatrx, ptr_codprod, dpr_coddcto, dpr_grupodcto, dpr_porcdcto, dpr_monto, dpr_anulado, dpr_tipo, dpr_prorrata
+---
 
-### Reglas:
+### Tabla 'producto'
 
--   Une las tablas por (hed_local, hed_pos, hed_numtrx) cuando el usuario pida combinar clientes y descuentos.
--   Usa alias claros (c para clientes, d para descuentos).
--   Todas las consultas deben estar en sintaxis MySQL estándar.
--   Si el usuario pide filtrar por rango de fechas, utiliza el campo hed_fechatrx.
--   Considera que dpr_anulado = 'N' significa descuento válido.
-
-### Ejemplos de solicitudes:
-
--   “Muéstrame los descuentos aplicados a clientes chilenos durante agosto de 2025.”
--   “Cuántas transacciones tuvieron descuento mayor a 10.000.”
--   “Promedio de descuento por género.”
--   “Lista de clientes con sus montos de descuento total.”
--   “Cantidad de transacciones por día y porcentaje con descuento.”
+| Campo         | Descripción                                                                          | Tipo    | Dato de ejemplo     |
+| ------------- | ------------------------------------------------------------------------------------ | ------- | ------------------- |
+| hed_local     | Número de local                                                                      | INT     | 122                 |
+| hed_pos       | Número de pos                                                                        | INT     | 1                   |
+| hed_numtrx    | Número de la transacción                                                             | INT     | 9120                |
+| hed_fechatrx  | Fecha de la transacción                                                              | DATE    | 2025-08-01 00:00:00 |
+| hed_horatrx   | Hora de la transacción                                                               | VARCHAR | 19:22:53            |
+| ptr_corrprod  | Correlativo del producto                                                             | INT     | 1                   |
+| ptr_codprod   | Código del producto                                                                  | INT     | 98681315452         |
+| ptr_fcontable | Fecha contable                                                                       | DATE    | 2025-08-01 00:00:00 |
+| ptr_brutopos  | Bruto positivo del producto                                                          | INT     | 119990              |
+| ptr_brutoneg  | Bruto negativo del producto                                                          | INT     | 0                   |
+| ptr_impuesto  | Monto de impuesto del producto                                                       | INT     | 1915800             |
+| ptr_unidades  | Unidades vendidas del producto                                                       | DOUBLE  | 1.0                 |
+| ptr_peso      | Cantidad vendida en gramos                                                           | DOUBLE  | 0.0                 |
+| ptr_pescant   | Flag que indica si el producto se vende por peso o cantidad (0,1)                    | INT     | 0                   |
+| ptr_anulado   | Flag que indica si el producto está anulado: N – No Anulado S – Anulado D - Devuelto | VARCHAR | D                   |
+| ptr_total     | Monto total vendido del producto                                                     | INT     | 119990              |
+| ptr_tipodoc   | Tipo de documento de la transacción (valores en tabla IRS_TIPO_DOC)                  | VARCHAR | BE                  |
+| ptr_tipotrx   | Tipo de la transacción                                                               | VARCHAR | V                   |
+| ptr_cajero    | Cajero de la transacción                                                             | INT     | 122                 |
+| ptr_factor    | Indicador de Nota de Crédito: -1 - NC 1 - Otros documentos                           | INT     | 1                   |
+| ptr_vendedor  | Código del vendedor                                                                  | INT     | 192105              |
+| hed_numdoc    | Número del documento de venta                                                        | INT     | 46195059            |
 
 ---
 
